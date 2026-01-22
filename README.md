@@ -320,4 +320,5 @@ Changelog
 
 
 v1.0 (2026-01): Initial release with all four major financial statements
+v1.0.1 (2026-01): Tuning
 
