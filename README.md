@@ -1,5 +1,6 @@
 # PJT-API (Caterpillar)
 SEC EDGAR Financial Data Extractor for Caterpillar Inc.
+
 Overview
 This Python script extracts Caterpillar's complete financial statement history from the SEC EDGAR API and exports it to organized Excel files.
 Features
