@@ -35,7 +35,7 @@ bashpip install -r requirements.txt
 Or install individually:
 bashpip install requests pandas openpyxl
 Step 2: Update Email Address
-Open sec_edgar_extractor.py and update line 389:
+Open sec_edgar_extractor.py and update line 451:
 pythonYOUR_EMAIL = "your.email@example.com"  # Replace with your actual email
 Important: The SEC requires a valid email address in the User-Agent header. This helps them contact you if there are issues with your requests.
 Usage
