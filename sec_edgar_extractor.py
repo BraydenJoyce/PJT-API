@@ -473,4 +473,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main
+
+https://claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&scope=user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers&code_challenge=7Tgc-ShyEcKZfJwt4hFIjFKTmHCm8Q4eUysQhGU8swQ&code_challenge_method=S256&state=Dm5aTXQMdvCkCZ65glilJ9UD_PmId7nS3zvlOjkuGZ8&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback
