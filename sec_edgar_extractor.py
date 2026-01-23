@@ -69,7 +69,7 @@ class SECEdgarExtractor:
         
         Args:
             facts_data: Complete company facts from API
-            statement_type: Type of statement ('income', 'balance', 'cashflow', 'equity')
+            statement_type: Type of statement ('income', 'balance', 'equity')
             
         Returns:
             pd.DataFrame: Organized financial data
@@ -136,144 +136,152 @@ class SECEdgarExtractor:
         """
         if statement_type == 'income':
             return {
-                # Revenue
-                'Revenues': 'Total Revenues',
-                'RevenueFromContractWithCustomerExcludingAssessedTax': 'Revenue from Contracts',
-                'SalesRevenueNet': 'Sales Revenue (Net)',
+                #Sales and Revenues
+                'Revenues': 'Sales of Machinery, Energy & Transportation',
+                'Revenues': 'Revenues of Financial Products',                           #Same Tag?
+                'Revenues': 'Total sales and revenues',
                 
-                # Costs and expenses
-                'CostOfRevenue': 'Cost of Revenue',
-                'CostOfGoodsAndServicesSold': 'Cost of Goods Sold',
-                'SellingGeneralAndAdministrativeExpense': 'SG&A Expense',
-                'ResearchAndDevelopmentExpense': 'R&D Expense',
-                'OperatingExpenses': 'Operating Expenses',
+                #Operating Costs
+                'CostOfRevenue': 'Cost of goods sold',
+                'SellingGeneralAndAdministrativeExpense': 'SG&A Expenses',
+                'ResearchAndDevelopmentExpense': 'R&D Expenses',
+                'FinancingInterestExpense': 'Interest expense of Financial Products',             #Product and Service [Axis]*****
+                'OtherOperatingIncomeExpenseNet': 'Other operating (income) expenses',
+                'CostsAndExpenses': 'Total operating costs',
                 
-                # Operating income
-                'OperatingIncomeLoss': 'Operating Income',
-                'GrossProfit': 'Gross Profit',
+                'CostsAndExpenses': 'OperatingIncomeLoss',
+
+                'InterestExpenseNonoperating': 'Interest expense excluding Financial Products',
+                'OtherNonoperatingIncomeExpense': 'Other income (expense)',
+
+                'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments': 'Consolidated profit before taxes',
                 
-                # Other income/expenses
-                'InterestExpense': 'Interest Expense',
-                'InterestIncomeExpenseNet': 'Interest Income (Expense), Net',
-                'OtherNonoperatingIncomeExpense': 'Other Income (Expense)',
-                'NonoperatingIncomeExpense': 'Non-operating Income',
+                'IncomeTaxExpenseBenefit': 'Provision (benefit) for income taxes',
+                'ProfitOfConsolidatedCompanies': 'Profit of consolidated companies',
+            
+                'IncomeLossFromEquityMethodInvestments': 'Equity in profit (loss) of unconsolidated affiliated companies',
                 
-                # Income before taxes
-                'IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest': 'Income Before Taxes',
-                
-                # Taxes
-                'IncomeTaxExpenseBenefit': 'Income Tax Expense',
-                
-                # Net income
-                'NetIncomeLoss': 'Net Income',
-                'ProfitLoss': 'Profit (Loss)',
-                'NetIncomeLossAvailableToCommonStockholdersBasic': 'Net Income Available to Common',
+                'ProfitLoss': 'Profit of consolidated and affiliated companies',
+
+                'NetIncomeLossAttributableToNoncontrollingInterest': 'Less: Profit (loss) attributable to noncontrolling interests',
+
+                'NetIncomeLossAvailableToCommonStockholdersBasic': 'Profit (Attributable to Common Stockholders)',
                 
                 # EPS
-                'EarningsPerShareBasic': 'EPS - Basic',
-                'EarningsPerShareDiluted': 'EPS - Diluted',
+                'EarningsPerShareBasic': 'Profit per common share',
+
+                'EarningsPerShareDiluted': 'Profit per common share - diluted',
+
+                # Weighted average common shares outstanding (millions)
                 'WeightedAverageNumberOfSharesOutstandingBasic': 'Shares Outstanding - Basic',
                 'WeightedAverageNumberOfDilutedSharesOutstanding': 'Shares Outstanding - Diluted',
             }
         
         elif statement_type == 'balance':
             return {
-                # Assets - Current
-                'AssetsCurrent': 'Total Current Assets',
-                'CashAndCashEquivalentsAtCarryingValue': 'Cash and Cash Equivalents',
-                'ShortTermInvestments': 'Short-term Investments',
-                'AccountsReceivableNetCurrent': 'Accounts Receivable (Net)',
-                'InventoryNet': 'Inventory',
-                'PrepaidExpenseAndOtherAssetsCurrent': 'Prepaid and Other Current Assets',
-                
-                # Assets - Non-current
-                'PropertyPlantAndEquipmentNet': 'Property, Plant & Equipment (Net)',
-                'Goodwill': 'Goodwill',
-                'IntangibleAssetsNetExcludingGoodwill': 'Intangible Assets (Net)',
-                'LongTermInvestments': 'Long-term Investments',
-                'OtherAssetsNoncurrent': 'Other Non-current Assets',
-                
-                # Total Assets
-                'Assets': 'Total Assets',
-                
-                # Liabilities - Current
-                'LiabilitiesCurrent': 'Total Current Liabilities',
-                'AccountsPayableCurrent': 'Accounts Payable',
-                'ShortTermBorrowings': 'Short-term Debt',
-                'LongTermDebtCurrent': 'Current Portion of Long-term Debt',
-                'AccruedLiabilitiesCurrent': 'Accrued Liabilities',
-                
-                # Liabilities - Non-current
-                'LongTermDebtNoncurrent': 'Long-term Debt',
-                'DeferredTaxLiabilitiesNoncurrent': 'Deferred Tax Liabilities',
-                'OtherLiabilitiesNoncurrent': 'Other Non-current Liabilities',
-                
-                # Total Liabilities
-                'Liabilities': 'Total Liabilities',
-                
-                # Equity
-                'StockholdersEquity': "Stockholders' Equity",
-                'CommonStockValue': 'Common Stock',
-                'AdditionalPaidInCapital': 'Additional Paid-in Capital',
-                'RetainedEarningsAccumulatedDeficit': 'Retained Earnings',
-                'TreasuryStockValue': 'Treasury Stock',
-                'AccumulatedOtherComprehensiveIncomeLossNetOfTax': 'Accumulated Other Comprehensive Income',
-                
-                # Total Liabilities and Equity
-                'LiabilitiesAndStockholdersEquity': 'Total Liabilities and Equity',
-            }
+                #Assets
+                #Current Assets
+                'CashAndCashEquivalentsAtCarryingValue': '          Cash & Cash Equivalents',
+                'AccountsReceivableNetCurrent': '          Receivables - trade and other',
+                'NotesAndLoansReceivableNetCurrent': '          Receivables - finance',
+                'PrepaidExpenseAndOtherAssetsCurrent': '          Prepaid Expenses And Other Assets Current',
+                'InventoryNet': '          Inventories',
+                'AssetsCurrent': '     Total Current Assets',
+
+                'PropertyPlantAndEquipmentNet': '     Property, Plant, & Equipment - net',
+                'AccountsReceivableNetNoncurrent': '     Long-term receivables - trade and other',
+                'NotesAndLoansReceivableNetNoncurrent': '     Long-term receivables - finance',
+                'NoncurrentDeferredAndRefundableIncomeTaxes': '     Noncurrent deferred and refundable income taxes',
+                'IntangibleAssetsNetExcludingGoodwill': '     Intangible Assets',
+                'Goodwill': '     Goodwill',
+                'OtherAssetsNoncurrent': '     Other assets',
+                'Assets': 'Total assets',
+
+                #Liabilities              
+                #Current liabilities:   
+                #Short-term borrowings:
+                'ShortTermBorrowings': '               Financial Products',
+                'AccountsPayableCurrent': '          Accounts payable',
+                'AccruedLiabilitiesCurrent': '          Accrued expenses',
+                'EmployeeRelatedLiabilitiesCurrent': '          Accrued wages: salaries and employee benefits',
+                'ContractWithCustomerLiabilityCurrent': '          Customer advances',
+                'DividendsPayableCurrent': '          Dividends payable',
+                'OtherLiabilitiesCurrent': '          Other current liabilities',
+
+                #Long-term debt due within one year:
+                'LongTermDebtAndCapitalLeaseObligationsCurrent': '               Machinery: Energy & Transportation', #Same Tag?
+                'LongTermDebtAndCapitalLeaseObligationsCurrent': '               Financial Products',
+                'LiabilitiesCurrent': '     Total current liabilities',
+
+                #Long-term debt due after one year:
+                'LongTermDebtAndCapitalLeaseObligations': '               Machinery: Energy & Transportation', #Same Tag?
+                'LongTermDebtAndCapitalLeaseObligations': '               Financial Products',
+                'PensionAndOtherPostretirementAndPostemploymentBenefitPlansLiabilitiesNoncurrent': '     Liability for postemployment benefits',
+                'OtherLiabilitiesNoncurrent': '     Other liabilities',
+                'Total Liabilities': 'Liabilities',
+
+                #Shareholders' Equity
+                'CommonStocksIncludingAdditionalPaidInCapital': '     Issued shares at paid-in amount',
+                'TreasuryStockValue': '     Treasury stock at cost',
+                'RetainedEarningsAccumulatedDeficit': '     Profit employed in the business',
+                'AccumulatedOtherComprehensiveIncomeLossNetOfTax': '     Accumulated other comprehensive income (loss)',
+                'MinorityInterest': '     Noncontrolling interests',
+                'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest': 'Total shareholders’ equity',
+                'Total liabilities and shareholders’ equity': 'LiabilitiesAndStockholdersEquity',
+                }
         
         elif statement_type == 'cashflow':
             return {
                 # Operating Activities
-                'NetCashProvidedByUsedInOperatingActivities': 'Net Cash from Operating Activities',
-                'DepreciationDepletionAndAmortization': 'Depreciation and Amortization',
-                'DeferredIncomeTaxExpenseBenefit': 'Deferred Income Taxes',
-                'IncreaseDecreaseInAccountsReceivable': 'Change in Accounts Receivable',
-                'IncreaseDecreaseInInventories': 'Change in Inventories',
-                'IncreaseDecreaseInAccountsPayable': 'Change in Accounts Payable',
-                'IncreaseDecreaseInAccruedLiabilities': 'Change in Accrued Liabilities',
+                'ProfitLoss': '     Profit of consolidated and affiliated companies',
+                #Adjustments to reconcile profit to net cash provided by operating activities
+                'DepreciationDepletionAndAmortization': '          Depreciation and Amortization',
+                'DeferredIncomeTaxExpenseBenefit': '          Provision (benefit) for deferred income taxes',
+                'NonCashGainLossOnDivestiture': '          (Gain) loss on divestiture',
+                'OtherNoncashIncomeExpense': '          Other',
+                #Changes in assets and liabilities, net of acquisitions and divestitures
+                'IncreaseDecreaseInReceivables': '          Receivables – trade and other',
+                'Inventories': 'IncreaseDecreaseInInventories',
+                'IncreaseDecreaseInAccountsPayable': '          Accounts payable',
+                'IncreaseDecreaseInAccruedLiabilities': '           Accrued expenses',
+                'IncreaseDecreaseInEmployeeRelatedLiabilities': '          Accrued wages, salaries and employee benefits',
+                'IncreaseDecreaseInContractWithCustomerLiability': '          Customer advances',
+                'IncreaseDecreaseInOtherOperatingAssets': '          Other assets - net',
+                'IncreaseDecreaseInOtherOperatingLiabilities': '          Other liabilities - net',
+                'NetCashProvidedByUsedInOperatingActivities': 'Net cash provided by (used for) operating activities',
                 
                 # Investing Activities
-                'NetCashProvidedByUsedInInvestingActivities': 'Net Cash from Investing Activities',
-                'PaymentsToAcquirePropertyPlantAndEquipment': 'Capital Expenditures',
-                'PaymentsToAcquireBusinessesNetOfCashAcquired': 'Acquisitions',
-                'ProceedsFromSaleOfPropertyPlantAndEquipment': 'Proceeds from Asset Sales',
-                'PaymentsToAcquireInvestments': 'Purchase of Investments',
-                'ProceedsFromSaleOfInvestments': 'Proceeds from Sale of Investments',
+                'PaymentsToAcquirePropertyPlantAndEquipment': '     Capital expenditures – excluding equipment leased to others',
+                'PaymentsToAcquireEquipmentOnLease': '     Expenditures for equipment leased to others',
+                'ProceedsFromSaleOfPropertyPlantAndEquipment': '     Proceeds from disposals of leased assets and property, plant and equipment',
+                'PaymentsToAcquireFinanceReceivables': '     Additions to finance receivables',
+                'ProceedsFromCollectionOfFinanceReceivables': '     Collections of finance receivables',
+                'ProceedsFromSaleOfFinanceReceivables': '     Proceeds from sale of finance receivables',
+                'PaymentsToAcquireBusinessesNetOfCashAcquired': '     Investments and acquisitions (net of cash acquired)',
+                'ProceedsFromDivestitureOfBusinessesNetOfCashDivested': '     Proceeds from sale of businesses and investments (net of cash sold)',
+                'ProceedsFromSaleAndMaturityOfMarketableSecurities': '      Proceeds from maturities and sale of securities',
+                'PaymentsToAcquireMarketableSecurities': '      Investments in securities',
+                'PaymentsForProceedsFromOtherInvestingActivities': '     Other – net',
+                'NetCashProvidedByUsedInInvestingActivities': 'Net cash provided by (used for) investing activities',
                 
-                # Financing Activities
-                'NetCashProvidedByUsedInFinancingActivities': 'Net Cash from Financing Activities',
-                'ProceedsFromIssuanceOfLongTermDebt': 'Proceeds from Debt Issuance',
-                'RepaymentsOfLongTermDebt': 'Repayment of Long-term Debt',
-                'ProceedsFromIssuanceOfCommonStock': 'Proceeds from Stock Issuance',
-                'PaymentsForRepurchaseOfCommonStock': 'Stock Repurchases',
-                'PaymentsOfDividends': 'Dividends Paid',
-                
-                # Net change
-                'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect': 'Net Change in Cash',
-                'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents': 'Cash at End of Period',
-            }
-        
-        elif statement_type == 'equity':
-            return {
-                # Beginning balance
-                'StockholdersEquity': "Stockholders' Equity",
-                
-                # Components
-                'CommonStockValue': 'Common Stock',
-                'AdditionalPaidInCapital': 'Additional Paid-in Capital',
-                'RetainedEarningsAccumulatedDeficit': 'Retained Earnings',
-                'TreasuryStockValue': 'Treasury Stock',
-                'AccumulatedOtherComprehensiveIncomeLossNetOfTax': 'AOCI',
-                
-                # Changes
-                'NetIncomeLoss': 'Net Income',
-                'OtherComprehensiveIncomeLossNetOfTax': 'Other Comprehensive Income',
-                'StockIssuedDuringPeriodValueNewIssues': 'Stock Issued',
-                'StockRepurchasedDuringPeriodValue': 'Stock Repurchased',
-                'Dividends': 'Dividends Declared',
-                'DividendsCommonStock': 'Common Stock Dividends',
+                # Cash flow from financing activities
+                'PaymentsOfDividendsCommonStock': '     Dividends paid',
+                'ProceedsFromIssuanceOrSaleOfEquity': '     Common stock issued, and other stock compensation transactions, net',
+                'PaymentsForRepurchaseOfCommonStock': '     Payments to purchase common stock',
+                'PaymentsForExciseTaxOnPurchaseOfCommonStock': '     Excise tax paid on purchases of common stock',
+                #Proceeds from debt issued (original maturities greater than three months)
+                'ProceedsFromDebtMaturingInMoreThanThreeMonths': '          - Machinery, Energy & Transportation',
+                'ProceedsFromDebtMaturingInMoreThanThreeMonths': '          - Financial Products',
+                #Payments on debt (original maturities greater than three months)
+                'RepaymentsOfDebtMaturingInMoreThanThreeMonths': '          - Machinery, Energy & Transportation',
+                'RepaymentsOfDebtMaturingInMoreThanThreeMonths': '          - Financial Products',
+                'ProceedsFromRepaymentsOfShortTermDebtMaturingInThreeMonthsOrLess': '     Short-term borrowings – net (original maturities three months or less)',
+                'NetCashProvidedByUsedInFinancingActivities': 'Net cash provided by (used for) financing activities',
+                'EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents': 'Effect of exchange rate changes on cash',
+                #
+                'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect': 'Increase (decrease) in cash, cash equivalents and restricted cash',
+                'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents': 'Cash, cash equivalents and restricted cash at beginning of period',
+                'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents': 'Cash, cash equivalents and restricted cash at end of period',
             }
         
         else:
@@ -294,11 +302,11 @@ class SECEdgarExtractor:
         if df.empty:
             return pd.DataFrame()
         
-        # Filter to annual reports only (10-K)
-        annual_df = df[df['Form'] == '10-K'].copy()
+        # Filter to annual and Quarterly reports only (10-K and 10-Q)
+        annual_df = df[df['Form'].isin(['10-K', '10-Q'])].copy()
         
         if annual_df.empty:
-            logger.warning(f"No 10-K data found for {statement_type}")
+            logger.warning(f"No 10-K or 10-Q data found for {statement_type}")
             return df
         
         # Create pivot table
@@ -313,8 +321,14 @@ class SECEdgarExtractor:
         pivot = pivot[sorted(pivot.columns, reverse=True)]
         
         # Format column names
-        pivot.columns = [col.strftime('%Y-%m-%d') if isinstance(col, datetime) else str(col) 
+        pivot.columns = [col.strftime('%Y-%m-%d') if isinstance(col, datetime) else str(col)
                         for col in pivot.columns]
+        
+        # Preserve the line-item order as declared in _get_statement_items
+        desired_order = list(self._get_statement_items(statement_type).values())
+        ordered_index = [lbl for lbl in desired_order if lbl in pivot.index]
+        ordered_index += [lbl for lbl in pivot.index if lbl not in ordered_index]
+        pivot = pivot.reindex(ordered_index)
         
         return pivot
     
@@ -334,8 +348,8 @@ class SECEdgarExtractor:
         header_format = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF', size=11)
         
-        for col_num, value in enumerate(df.columns.values, 1):
-            cell = worksheet.cell(row=1, column=col_num)
+        # Apply header formatting to the actual first row in the worksheet
+        for cell in next(worksheet.iter_rows(min_row=1, max_row=1)):
             cell.fill = header_format
             cell.font = header_font
             cell.alignment = Alignment(horizontal='center', vertical='center')
@@ -346,15 +360,25 @@ class SECEdgarExtractor:
             column_letter = get_column_letter(column[0].column)
             for cell in column:
                 try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(cell.value)
+                    # measure string length of the cell value safely
+                    text = str(cell.value) if cell.value is not None else ""
+                    if len(text) > max_length:
+                        max_length = len(text)
                 except:
                     pass
             adjusted_width = min(max_length + 2, 50)
             worksheet.column_dimensions[column_letter].width = adjusted_width
         
-        # Freeze header row
-        worksheet.freeze_panes = 'A2'
+        # Apply accounting number format to numeric cells (exclude first column which holds line items/index)
+        accounting_format = '#,##0'
+        for row in worksheet.iter_rows(min_row=2):  # skip header row
+            for cell in row[1:]:  # skip first column (A)
+                if cell.value is not None and isinstance(cell.value, (int, float)):
+                    cell.number_format = accounting_format
+                    cell.alignment = Alignment(horizontal='right', vertical='center')
+        
+        # Freeze first column (A) and header row simultaneously
+        worksheet.freeze_panes = 'B2'
     
     def export_to_excel(self, output_filename='caterpillar_financials.xlsx'):
         """
@@ -402,8 +426,8 @@ class SECEdgarExtractor:
                 # Pivot view
                 balance_pivot = self.create_pivot_table(balance_df, 'balance')
                 if not balance_pivot.empty:
-                    balance_pivot.to_excel(writer, sheet_name='Balance Sheet - Annual')
-                    self.format_excel_sheet(writer, 'Balance Sheet - Annual', balance_pivot)
+                    balance_pivot.to_excel(writer, sheet_name='Balance Sheet - Quarterly')
+                    self.format_excel_sheet(writer, 'Balance Sheet - Quarterly', balance_pivot)
             
             # 3. Cash Flow Statement
             logger.info("\n" + "="*60)
@@ -420,22 +444,6 @@ class SECEdgarExtractor:
                 if not cashflow_pivot.empty:
                     cashflow_pivot.to_excel(writer, sheet_name='Cash Flow - Annual')
                     self.format_excel_sheet(writer, 'Cash Flow - Annual', cashflow_pivot)
-            
-            # 4. Statement of Equity
-            logger.info("\n" + "="*60)
-            logger.info("PROCESSING STATEMENT OF EQUITY")
-            logger.info("="*60)
-            equity_df = self.extract_financial_statement_data(facts_data, 'equity')
-            if not equity_df.empty:
-                # Raw data
-                equity_df.to_excel(writer, sheet_name='Equity - Raw', index=False)
-                self.format_excel_sheet(writer, 'Equity - Raw', equity_df)
-                
-                # Pivot view
-                equity_pivot = self.create_pivot_table(equity_df, 'equity')
-                if not equity_pivot.empty:
-                    equity_pivot.to_excel(writer, sheet_name='Equity - Annual')
-                    self.format_excel_sheet(writer, 'Equity - Annual', equity_pivot)
         
         logger.info("\n" + "="*60)
         logger.info(f"✓ Export complete! File saved: {output_filename}")
@@ -448,11 +456,11 @@ def main():
     """Main execution function"""
     
     # IMPORTANT: Replace with your email address
-    YOUR_EMAIL = "your.email@example.com"
+    YOUR_EMAIL = "brayden.joyce@doosan.com"
     
     if YOUR_EMAIL == "your.email@example.com":
         print("\n" + "!"*60)
-        print("IMPORTANT: Please update YOUR_EMAIL in the script")
+        print("IMPORTANT: Please update YOUR_EMAIL in the script (line 451)")
         print("The SEC requires a valid email in the User-Agent header")
         print("!"*60 + "\n")
         return
@@ -465,14 +473,11 @@ def main():
     
     print(f"\n✓ Success! Financial data exported to: {output_file}")
     print("\nThe Excel file contains:")
-    print("  • Income Statement (Raw data + Annual pivot)")
-    print("  • Balance Sheet (Raw data + Annual pivot)")
-    print("  • Cash Flow Statement (Raw data + Annual pivot)")
-    print("  • Statement of Equity (Raw data + Annual pivot)")
+    print("  • Income Statement (Raw data + Quarterly pivot)")
+    print("  • Balance Sheet (Raw data + Quarterly pivot)")
+    print("  • Cash Flow Statement (Raw data + Quarterly pivot)")
     print("\nEach statement has complete historical data from SEC EDGAR!")
 
 
 if __name__ == "__main__":
-    main
-
-https://claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&scope=user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers&code_challenge=7Tgc-ShyEcKZfJwt4hFIjFKTmHCm8Q4eUysQhGU8swQ&code_challenge_method=S256&state=Dm5aTXQMdvCkCZ65glilJ9UD_PmId7nS3zvlOjkuGZ8&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback
+    main()
