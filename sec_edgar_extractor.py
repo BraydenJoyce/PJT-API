@@ -53,7 +53,7 @@ class SECEdgarExtractor:
         try:
             response = requests.get(url, headers=self.headers)
             response.raise_for_status()
-            time.sleep(0.1)  # Rate limiting - be respectful to SEC servers
+            time.sleep(0.1)  # Rate limiting
             
             data = response.json()
             logger.info("Successfully retrieved company facts")
@@ -137,45 +137,58 @@ class SECEdgarExtractor:
         if statement_type == 'income':
             return {
                 #Sales and Revenues
-                'Revenues': 'Sales of Machinery, Energy & Transportation',
-                'Revenues': 'Revenues of Financial Products',                           #Same Tag?
-                'Revenues': 'Total sales and revenues',
-                
+                '': '',
+                'Revenues': '     Sales of Machinery, Energy & Transportation',
+                'Revenues': '     Revenues of Financial Products',                           #Same Tag?
+                'Revenues': '     Total sales and revenues',
+
                 #Operating Costs
-                'CostOfRevenue': 'Cost of goods sold',
-                'SellingGeneralAndAdministrativeExpense': 'SG&A Expenses',
-                'ResearchAndDevelopmentExpense': 'R&D Expenses',
-                'FinancingInterestExpense': 'Interest expense of Financial Products',             #Product and Service [Axis]*****
-                'OtherOperatingIncomeExpenseNet': 'Other operating (income) expenses',
-                'CostsAndExpenses': 'Total operating costs',
+                '': '',
+                'CostOfRevenue': '     Cost of goods sold',
+                'SellingGeneralAndAdministrativeExpense': '     SG&A Expenses',
+                'ResearchAndDevelopmentExpense': '     R&D Expenses',
+                'FinancingInterestExpense': '     Interest expense of Financial Products',             #Financial Products [Member]*****
+                'OtherOperatingIncomeExpenseNet': '     Other operating (income) expenses',
+                'CostsAndExpenses': '     Total operating costs',
                 
-                'CostsAndExpenses': 'OperatingIncomeLoss',
+                '': '',
+                'OperatingIncomeLoss' : 'Operating Profit',
 
-                'InterestExpenseNonoperating': 'Interest expense excluding Financial Products',
-                'OtherNonoperatingIncomeExpense': 'Other income (expense)',
+                '': '',
+                'InterestExpenseNonoperating': '     Interest expense excluding Financial Products',
+                'OtherNonoperatingIncomeExpense': '     Other income (expense)',
 
+                '': '',
                 'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments': 'Consolidated profit before taxes',
                 
-                'IncomeTaxExpenseBenefit': 'Provision (benefit) for income taxes',
-                'ProfitOfConsolidatedCompanies': 'Profit of consolidated companies',
+                '': '',
+                'IncomeTaxExpenseBenefit': '     Provision (benefit) for income taxes',
+                'ProfitOfConsolidatedCompanies': '     Profit of consolidated companies',
             
-                'IncomeLossFromEquityMethodInvestments': 'Equity in profit (loss) of unconsolidated affiliated companies',
+                '': '',
+                'IncomeLossFromEquityMethodInvestments': '     Equity in profit (loss) of unconsolidated affiliated companies',
                 
+                '': '',
                 'ProfitLoss': 'Profit of consolidated and affiliated companies',
 
+                '': '',
                 'NetIncomeLossAttributableToNoncontrollingInterest': 'Less: Profit (loss) attributable to noncontrolling interests',
 
+                '': '',
                 'NetIncomeLossAvailableToCommonStockholdersBasic': 'Profit (Attributable to Common Stockholders)',
                 
                 # EPS
+                '': '',
                 'EarningsPerShareBasic': 'Profit per common share',
 
+                '': '',
                 'EarningsPerShareDiluted': 'Profit per common share - diluted',
 
                 # Weighted average common shares outstanding (millions)
+                '': '',
                 'WeightedAverageNumberOfSharesOutstandingBasic': 'Shares Outstanding - Basic',
                 'WeightedAverageNumberOfDilutedSharesOutstanding': 'Shares Outstanding - Diluted',
-            }
+                    }
         
         elif statement_type == 'balance':
             return {
@@ -309,6 +322,14 @@ class SECEdgarExtractor:
             logger.warning(f"No 10-K or 10-Q data found for {statement_type}")
             return df
         
+        # For income statement, filter to only 3-month periods (approximately 90-100 days)
+        if statement_type == 'income':
+            annual_df['Period_Length'] = (annual_df['End_Date'] - annual_df['Start_Date']).dt.days
+            annual_df = annual_df[annual_df['Period_Length'] <= 100]
+            if annual_df.empty:
+                logger.warning(f"No 3-month period data found for {statement_type}")
+                return pd.DataFrame()
+        
         # Create pivot table
         pivot = annual_df.pivot_table(
             index='Line_Item',
@@ -410,8 +431,8 @@ class SECEdgarExtractor:
                 # Pivot view
                 income_pivot = self.create_pivot_table(income_df, 'income')
                 if not income_pivot.empty:
-                    income_pivot.to_excel(writer, sheet_name='Income Statement - Annual')
-                    self.format_excel_sheet(writer, 'Income Statement - Annual', income_pivot)
+                    income_pivot.to_excel(writer, sheet_name='Income Statement - Quarterly')
+                    self.format_excel_sheet(writer, 'Income Statement - Quarterly', income_pivot)
             
             # 2. Balance Sheet
             logger.info("\n" + "="*60)
@@ -442,8 +463,8 @@ class SECEdgarExtractor:
                 # Pivot view
                 cashflow_pivot = self.create_pivot_table(cashflow_df, 'cashflow')
                 if not cashflow_pivot.empty:
-                    cashflow_pivot.to_excel(writer, sheet_name='Cash Flow - Annual')
-                    self.format_excel_sheet(writer, 'Cash Flow - Annual', cashflow_pivot)
+                    cashflow_pivot.to_excel(writer, sheet_name='Cash Flow - Quarterly')
+                    self.format_excel_sheet(writer, 'Cash Flow - Quarterly', cashflow_pivot)
         
         logger.info("\n" + "="*60)
         logger.info(f"✓ Export complete! File saved: {output_filename}")
