@@ -56,55 +56,42 @@ class ComprehensiveXBRLExtractor:
         if statement_type == 'income':
             return OrderedDict([
                 # Sales and Revenues
-                ('', ''),
-                ('Revenues', '     Sales of Machinery, Energy & Transportation'),
+                ('Revenues_MET', '     Sales of Machinery, Energy & Transportation'),
                 ('Revenues_FinancialProducts', '     Revenues of Financial Products'),
                 ('Revenues_Total', '     Total sales and revenues'),
                 
                 # Operating Costs
-                ('', ''),
                 ('CostOfRevenue', '     Cost of goods sold'),
                 ('SellingGeneralAndAdministrativeExpense', '     SG&A Expenses'),
                 ('ResearchAndDevelopmentExpense', '     R&D Expenses'),
-                ('FinancingInterestExpense', '     Interest expense of Financial Products'),
+                ('FinancingInterestExpense_FinancialProducts', '     Interest expense of Financial Products'),
                 ('OtherOperatingIncomeExpenseNet', '     Other operating (income) expenses'),
                 ('CostsAndExpenses', '     Total operating costs'),
                 
-                ('', ''),
                 ('OperatingIncomeLoss', 'Operating Profit'),
                 
-                ('', ''),
-                ('InterestExpenseNonoperating', '     Interest expense excluding Financial Products'),
+                ('InterestExpenseNonoperating_EXFP', '     Interest expense excluding Financial Products'),
                 ('OtherNonoperatingIncomeExpense', '     Other income (expense)'),
                 
-                ('', ''),
                 ('IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments', 'Consolidated profit before taxes'),
                 
-                ('', ''),
                 ('IncomeTaxExpenseBenefit', '     Provision (benefit) for income taxes'),
                 ('ProfitOfConsolidatedCompanies', '     Profit of consolidated companies'),
                 
-                ('', ''),
                 ('IncomeLossFromEquityMethodInvestments', '     Equity in profit (loss) of unconsolidated affiliated companies'),
                 
-                ('', ''),
                 ('ProfitLoss', 'Profit of consolidated and affiliated companies'),
                 
-                ('', ''),
                 ('NetIncomeLossAttributableToNoncontrollingInterest', 'Less: Profit (loss) attributable to noncontrolling interests'),
                 
-                ('', ''),
                 ('NetIncomeLossAvailableToCommonStockholdersBasic', 'Profit (Attributable to Common Stockholders)'),
                 
                 # EPS
-                ('', ''),
                 ('EarningsPerShareBasic', 'Profit per common share'),
                 
-                ('', ''),
                 ('EarningsPerShareDiluted', 'Profit per common share - diluted'),
                 
                 # Shares Outstanding
-                ('', ''),
                 ('WeightedAverageNumberOfSharesOutstandingBasic', 'Shares Outstanding - Basic'),
                 ('WeightedAverageNumberOfDilutedSharesOutstanding', 'Shares Outstanding - Diluted'),
             ])
@@ -131,7 +118,7 @@ class ComprehensiveXBRLExtractor:
                 
                 # Liabilities
                 # Current liabilities
-                ('ShortTermBorrowings', '               Financial Products'),
+                ('ShortTermBorrowings_FinancialProducts', '               Financial Products'),
                 ('AccountsPayableCurrent', '          Accounts payable'),
                 ('AccruedLiabilitiesCurrent', '          Accrued expenses'),
                 ('EmployeeRelatedLiabilitiesCurrent', '          Accrued wages: salaries and employee benefits'),
@@ -522,7 +509,8 @@ class ComprehensiveXBRLExtractor:
                 segment_map = {
                     'FinancialProducts': 'FinancialProductsMember',
                     'FP': 'FinancialProductsMember',
-                    'MET': 'MachineryEnergyAndTransportationMember',
+                    'MET': 'MachineryEnergyTransportationMember',
+                    'EXFP': 'AllOtherExcludingFinancialProductsMember',
                     'Total': 'Consolidated'
                 }
                 
@@ -675,18 +663,18 @@ def main():
     )
     
     output_file = extractor.export_to_excel(
-        output_filename='caterpillar_financials_complete.xlsx',
+        output_filename='caterpillar_financials.xlsx',
         start_year=START_YEAR
     )
     
     if output_file:
-        print(f"\n✓ Success! Complete financial data exported to: {output_file}")
+        print(f"\nSuccess! Complete financial data exported to: {output_file}")
         print(f"\nData range: {START_YEAR} - Present")
         print("\nThe Excel file contains:")
-        print("  • Income Statement - Quarterly (with segments)")
-        print("  • Balance Sheet - Quarterly")
-        print("  • Cash Flow Statement - Quarterly")
-        print("  • All raw data with Q4 calculations")
+        print("  Income Statement - Quarterly")
+        print("  Balance Sheet - Quarterly")
+        print("  Cash Flow Statement - Quarterly")
+        print("  All raw data")
 
 
 if __name__ == "__main__":
