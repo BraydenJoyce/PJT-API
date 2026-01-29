@@ -15,63 +15,63 @@ COMPANIES = {
         'ticker': 'CAT',
         'cik': '0000018230',
         'output_file': 'caterpillar_financials.xlsx',
-        'script': 'caterpillar_extractor.py'
+        'script': 'caterpillar.py'
     },
     '2': {
         'name': 'Deere & Company',
         'ticker': 'DE',
         'cik': '0000315189',
         'output_file': 'deere_financials.xlsx',
-        'script': 'deere_extractor.py'
+        'script': 'deere.py'
     },
     '3': {
         'name': 'Toro Company',
         'ticker': 'TTC',
         'cik': '0000737758',
         'output_file': 'toro_financials.xlsx',
-        'script': 'toro_extractor.py'
+        'script': 'toro.py'
     },
     '4': {
         'name': 'Polaris Inc.',
         'ticker': 'PII',
         'cik': '0000931015',
         'output_file': 'polaris_financials.xlsx',
-        'script': 'polaris_extractor.py'
+        'script': 'polaris.py'
     },
     '5': {
         'name': 'Case New Holland Industrial',
         'ticker': 'CNH',
         'cik': '0001567094',
         'output_file': 'cnh_financials.xlsx',
-        'script': 'cnh_extractor.py'
+        'script': 'cnh.py'
     },
     '6': {
         'name': 'AGCO Corporation',
         'ticker': 'AGCO',
         'cik': '0000880266',
         'output_file': 'agco_financials.xlsx',
-        'script': 'agco_extractor.py'
+        'script': 'agco.py'
     },
     '7': {
         'name': 'Hyster-Yale Inc.',
         'ticker': 'HY',
         'cik': '0001173514',
         'output_file': 'hysteryale_financials.xlsx',
-        'script': 'hysteryale_extractor.py'
+        'script': 'hyster_yale.py'
     },
     '8': {
         'name': 'Ingersoll Rand Inc.',
         'ticker': 'IR',
         'cik': '0001699150',
         'output_file': 'ingersollrand_financials.xlsx',
-        'script': 'ingersollrand_extractor.py'
+        'script': 'ingersoll_rand.py'
     },
     '9': {
         'name': 'Generac Holdings Inc.',
         'ticker': 'GNRC',
         'cik': '0001474735',
         'output_file': 'generac_financials.xlsx',
-        'script': 'generac_extractor.py'
+        'script': 'generac.py'
     },
 }
 
@@ -143,16 +143,12 @@ def run_extractor(company_info, email):
     
     if result.returncode == 0:
         print(f"\n{'='*60}")
-        print(f"✓ SUCCESS!")
+        print(f" SUCCESS!")
         print(f"{'='*60}")
         print(f"\nFinancial data for {company_info['name']} has been exported to:")
         print(f"  → {company_info['output_file']}")
-        print(f"\nThe Excel file contains:")
-        print(f"  • Income Statement (Raw data + Quarterly pivot)")
-        print(f"  • Balance Sheet (Raw data + Quarterly pivot)")
-        print(f"  • Cash Flow Statement (Raw data + Quarterly pivot)")
     else:
-        print(f"\n✗ Error occurred during extraction. Please check the output above.")
+        print(f"\n Error occurred during extraction. Please check the output above.")
 
 def main():
     """Main execution function"""
@@ -164,7 +160,7 @@ def main():
     email = input("\nEnter your email address (required by SEC): ").strip()
     
     if not email or '@' not in email:
-        print("\n✗ Invalid email address. Exiting.")
+        print("\n Invalid email address. Exiting.")
         sys.exit(1)
     
     # Main loop
