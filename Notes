@@ -1,187 +1,88 @@
-def extract_financial_statement_data(self, facts_data):
-    """
-    Extract ALL financial data from company facts JSON
-    No need to specify line items - we get everything!
-    """
-    logger.info("Extracting ALL financial data from company facts...")
-    
-    # Get US-GAAP facts (this has everything)
-    us_gaap = facts_data.get('facts', {}).get('us-gaap', {})
-    
-    all_records = []
-    
-    # Loop through EVERY XBRL tag in the data
-    for tag_name, tag_data in us_gaap.items():
+Great question! To add more segment info to the financial statements, you need to edit the _get_statement_items() function. Here's how:
+Where to Edit
+Look for the _get_statement_items() method around line 80-210. You'll see three sections:
+
+if statement_type == 'income':
+elif statement_type == 'balance':
+elif statement_type == 'cashflow':
+
+How Segment Mapping Works
+When you want a line item to show segment data, you add a suffix to the tag name:
+python# Original tag (consolidated only)
+('Revenues', 'Total sales and revenues'),
+
+# With segments
+('Revenues_MET', '     Sales of Machinery, Energy & Transportation'),
+('Revenues_FinancialProducts', '     Revenues of Financial Products'),
+('Revenues', 'Total sales and revenues'),  # Consolidated total
+Available Segment Suffixes
+The script maps these suffixes to actual XBRL segment names:
+python'_FinancialProducts' or '_FP'  →  Financial Products segment
+'_MET'                          →  Machinery, Energy & Transportation segment
+(no suffix)                     →  Consolidated data
+Example: Adding Segment to Operating Income
+Let's say you want to break down Operating Income by segment:
+Find this in the income statement section:
+python('OperatingIncomeLoss', 'Operating Profit'),
+Change it to:
+python('OperatingIncomeLoss_MET', '     Operating Profit - Machinery, Energy & Transportation'),
+('OperatingIncomeLoss_FP', '     Operating Profit - Financial Products'),
+('OperatingIncomeLoss', 'Operating Profit - Total'),
+Example: Adding Segment to Balance Sheet Assets
+Find this in the balance sheet section:
+python('Assets', 'Total assets'),
+Change it to:
+python('Assets_MET', '     Total Assets - Machinery, Energy & Transportation'),
+('Assets_FP', '     Total Assets - Financial Products'),
+('Assets', 'Total assets'),
+Full Example - Adding Segments to Cost of Revenue
+Here's a complete before/after:
+Before:
+pythonif statement_type == 'income':
+    return OrderedDict([
+        ('Revenues', '     Total sales and revenues'),
+        ('', ''),
+        ('CostOfRevenue', '     Cost of goods sold'),
+        ('OperatingIncomeLoss', 'Operating Profit'),
+    ])
+After (with segments):
+pythonif statement_type == 'income':
+    return OrderedDict([
+        ('Revenues_MET', '     Sales of Machinery, Energy & Transportation'),
+        ('Revenues_FP', '     Revenues of Financial Products'),
+        ('Revenues', '     Total sales and revenues'),
         
-        # Get human-readable label
-        label = tag_data.get('label', tag_name)
-        description = tag_data.get('description', '')
+        ('', ''),
+        ('CostOfRevenue_MET', '     Cost of goods sold - Machinery, Energy & Transportation'),
+        ('CostOfRevenue_FP', '     Cost of goods sold - Financial Products'),
+        ('CostOfRevenue', '     Cost of goods sold - Total'),
         
-        # Get all units (USD, shares, pure, etc.)
-        units = tag_data.get('units', {})
-        
-        # Process each unit type
-        for unit_type, records in units.items():
-            for record in records:
-                all_records.append({
-                    'Line_Item': label,
-                    'XBRL_Tag': tag_name,
-                    'Description': description,
-                    'Value': record.get('val'),
-                    'Unit': unit_type,
-                    'End_Date': record.get('end'),
-                    'Start_Date': record.get('start'),
-                    'Filed_Date': record.get('filed'),
-                    'Form': record.get('form'),
-                    'Fiscal_Year': record.get('fy'),
-                    'Fiscal_Period': record.get('fp'),
-                    'Accession_Number': record.get('accn'),
-                    'Frame': record.get('frame')
-                })
-    
-    if not all_records:
-        logger.warning("No data found")
-        return pd.DataFrame()
-    
-    df = pd.DataFrame(all_records)
-    
-    # Convert dates
-    df['End_Date'] = pd.to_datetime(df['End_Date'])
-    df['Filed_Date'] = pd.to_datetime(df['Filed_Date'])
-    df['Start_Date'] = pd.to_datetime(df['Start_Date'])
-    
-    # Sort by most recent first
-    df = df.sort_values(['End_Date', 'Line_Item'], ascending=[False, True])
-    
-    logger.info(f"Extracted {len(df)} total records across ALL line items")
-    logger.info(f"Unique line items: {df['Line_Item'].nunique()}")
-    
-    return df
+        ('', ''),
+        ('OperatingIncomeLoss_MET', '     Operating Profit - Machinery, Energy & Transportation'),
+        ('OperatingIncomeLoss_FP', '     Operating Profit - Financial Products'),
+        ('OperatingIncomeLoss', 'Operating Profit'),
+    ])
+Important Notes
+
+The suffix must match the segment map in the create_statement_pivot() function (around line 570):
+
+python   segment_map = {
+       'FinancialProducts': 'FinancialProductsMember',
+       'FP': 'FinancialProductsMember',
+       'MET': 'MachineryEnergyAndTransportationMember',
+   }
+
+Order matters - List segment breakdowns first, then the consolidated total
+Blank rows - Use ('', '') to add spacing
+The script will automatically:
+
+Extract the segment data from XBRL
+Calculate Q4 for each segment separately
+Display them in your specified order
 
 
-# Filter 10-Q
 
-def filter_to_10q(self, df):
-    """Filter data to only 10-Q filings"""
-    if df.empty:
-        return df
-    
-    # Get only 10-Q data
-    df_10q = df[df['Form'] == '10-Q'].copy()
-    
-    logger.info(f"Filtered to {len(df_10q)} records from 10-Q filings")
-    logger.info(f"Date range: {df_10q['End_Date'].min()} to {df_10q['End_Date'].max()}")
-    
-    return df_10q
-
-
-def create_quarterly_pivot(self, df, num_quarters=8):
-    """
-    Create pivot table with most recent quarters
-    
-    Args:
-        df: DataFrame with financial data
-        num_quarters: Number of most recent quarters to include (default 8)
-    """
-    if df.empty:
-        return pd.DataFrame()
-    
-    # Filter to 10-Q only
-    df_10q = df[df['Form'] == '10-Q'].copy()
-    
-    if df_10q.empty:
-        logger.warning("No 10-Q data available")
-        return pd.DataFrame()
-    
-    # For each line item, keep only USD values (filter out shares/pure for pivot)
-    df_usd = df_10q[df_10q['Unit'] == 'USD'].copy()
-    
-    # Create pivot: Line items as rows, End_Date as columns
-    pivot = df_usd.pivot_table(
-        index='Line_Item',
-        columns='End_Date',
-        values='Value',
-        aggfunc='first'  # Use first value if duplicates
-    )
-    
-    # Sort columns by date (most recent first)
-    pivot = pivot[sorted(pivot.columns, reverse=True)]
-    
-    # Keep only the most recent N quarters
-    if len(pivot.columns) > num_quarters:
-        pivot = pivot.iloc[:, :num_quarters]
-    
-    # Format column names as dates
-    pivot.columns = [col.strftime('%Y-%m-%d') if isinstance(col, datetime) else str(col) 
-                    for col in pivot.columns]
-    
-    logger.info(f"Created pivot with {len(pivot)} line items across {len(pivot.columns)} quarters")
-    
-    return pivot
-
-def export_to_excel(self, output_filename='caterpillar_complete_10Q.xlsx'):
-    """
-    Export ALL financial data with focus on 10-Q
-    """
-    logger.info("="*60)
-    logger.info("Extracting COMPLETE Caterpillar Financial Data")
-    logger.info("="*60)
-    
-    # Download logo
-    logo_img = self.download_caterpillar_logo()
-    
-    # Get ALL company facts
-    facts_data = self.get_company_facts()
-    
-    # Extract ALL financial data (no filtering by statement type)
-    logger.info("\nExtracting ALL financial line items...")
-    all_data = self.extract_financial_statement_data(facts_data)
-    
-    # Create Excel file
-    with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
-        
-        # Sheet 1: ALL Raw Data
-        logger.info("\nCreating sheet: ALL Raw Data")
-        all_data.to_excel(writer, sheet_name='All Data - Complete', index=False)
-        self.format_excel_sheet(writer, 'All Data - Complete', all_data, is_pivot=False)
-        
-        # Sheet 2: 10-Q Only Raw Data
-        logger.info("\nCreating sheet: 10-Q Only Data")
-        data_10q = self.filter_to_10q(all_data)
-        if not data_10q.empty:
-            data_10q.to_excel(writer, sheet_name='10Q Only - Raw', index=False)
-            self.format_excel_sheet(writer, '10Q Only - Raw', data_10q, is_pivot=False)
-        
-        # Sheet 3: Quarterly Pivot (Most Recent 8 Quarters)
-        logger.info("\nCreating sheet: Quarterly Pivot")
-        quarterly_pivot = self.create_quarterly_pivot(all_data, num_quarters=8)
-        if not quarterly_pivot.empty:
-            quarterly_pivot.to_excel(writer, sheet_name='Quarterly 10Q - Pivot')
-            self.format_excel_sheet(writer, 'Quarterly 10Q - Pivot', quarterly_pivot, 
-                                  is_pivot=True, logo_img=logo_img)
-        
-        # BONUS: Sheet 4: 10-K Annual Data Pivot
-        logger.info("\nCreating sheet: Annual 10-K Pivot")
-        data_10k = all_data[all_data['Form'] == '10-K'].copy()
-        if not data_10k.empty:
-            data_10k_usd = data_10k[data_10k['Unit'] == 'USD'].copy()
-            annual_pivot = data_10k_usd.pivot_table(
-                index='Line_Item',
-                columns='End_Date',
-                values='Value',
-                aggfunc='first'
-            )
-            annual_pivot = annual_pivot[sorted(annual_pivot.columns, reverse=True)]
-            annual_pivot.columns = [col.strftime('%Y-%m-%d') for col in annual_pivot.columns]
-            
-            annual_pivot.to_excel(writer, sheet_name='Annual 10K - Pivot')
-            self.format_excel_sheet(writer, 'Annual 10K - Pivot', annual_pivot, 
-                                  is_pivot=True, logo_img=logo_img)
-    
-    logger.info("\n" + "="*60)
-    logger.info(f"✓ Export complete! File saved: {output_filename}")
-    logger.info("="*60)
-    
-    return output_filename
+Want me to add specific segments for you?
+Just tell me which line items you want broken down by segment, and I'll show you exactly what to add!
 
 
