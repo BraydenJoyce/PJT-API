@@ -647,13 +647,15 @@ def main():
     CIK = "0000315189"
     COMPANY_NAME = "Deere & Company"
     TICKER = "de"
+    FORM = "10-Q"  # Use "10-K" for annual reports or "10-Q" for quarterly reports
     START_YEAR = 2020
     
     extractor = ComprehensiveXBRLExtractor(
         email=YOUR_EMAIL,
         cik=CIK,
         company_name=COMPANY_NAME,
-        ticker=TICKER
+        ticker=TICKER,
+        form=FORM
     )
     
     output_file = extractor.export_to_excel(
