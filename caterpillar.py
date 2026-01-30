@@ -397,7 +397,7 @@ class ComprehensiveXBRLExtractor:
         return df
     
     def calculate_q4_data(self, df):
-        """Calculate Q4 by subtracting Q1+Q2+Q3 from annual"""
+        """Calculate Q4 by subtracting Q1+Q2+Q3 from annual for flow statements, and copy 10-K data for balance sheet"""
         logger.info("\n" + "="*60)
         logger.info("Calculating Q4 data")
         logger.info("="*60)
@@ -418,45 +418,76 @@ class ComprehensiveXBRLExtractor:
                 ].copy()
                 
                 for _, annual_row in annual_subset.iterrows():
-                    fiscal_year_end = annual_row['end_date']
+                    # Check if this is a balance sheet item (has instant_date) or flow statement (has end_date)
+                    is_balance_sheet = pd.notna(annual_row.get('instant_date'))
                     
-                    if pd.isna(fiscal_year_end):
-                        continue
-                    
-                    fiscal_year = fiscal_year_end.year
-                    
-                    quarterly_subset = quarterly_df[
-                        (quarterly_df['tag'] == tag) &
-                        (quarterly_df['segment'] == segment) &
-                        (quarterly_df['end_date'] > pd.Timestamp(year=fiscal_year-1, month=12, day=31)) &
-                        (quarterly_df['end_date'] <= fiscal_year_end)
-                    ]
-                    
-                    if len(quarterly_subset) == 3:
-                        q1q2q3_total = quarterly_subset['value'].sum()
-                        annual_total = annual_row['value']
-                        q4_value = annual_total - q1q2q3_total
+                    if is_balance_sheet:
+                        # For balance sheet: Just copy the 10-K data as Q4
+                        fiscal_year_end = annual_row['instant_date']
                         
-                        q3_end = quarterly_subset['end_date'].max()
+                        if pd.isna(fiscal_year_end):
+                            continue
                         
                         q4_record = {
                             'tag': tag,
-                            'value': q4_value,
+                            'value': annual_row['value'],
                             'segment': segment,
-                            'start_date': q3_end + pd.Timedelta(days=1),
-                            'end_date': fiscal_year_end,
-                            'instant_date': None,
+                            'start_date': None,
+                            'end_date': None,
+                            'instant_date': fiscal_year_end,
                             'report_date': fiscal_year_end,
-                            'form': '10-Q (Q4 Calculated)',
+                            'form': '10-K (Q4)',
                             'accession': annual_row['accession'],
                             'filing_date': annual_row['filing_date'],
-                            'context_id': f"Q4_{fiscal_year}_{segment}",
+                            'context_id': f"Q4_{fiscal_year_end.year}_{segment}",
                             'dimension': annual_row.get('dimension'),
                             'decimals': annual_row.get('decimals'),
                             'unit': annual_row.get('unit')
                         }
                         
                         q4_records.append(q4_record)
+                    
+                    else:
+                        # For flow statements (income, cash flow): Calculate Q4 by subtraction
+                        fiscal_year_end = annual_row['end_date']
+                        
+                        if pd.isna(fiscal_year_end):
+                            continue
+                        
+                        fiscal_year = fiscal_year_end.year
+                        
+                        quarterly_subset = quarterly_df[
+                            (quarterly_df['tag'] == tag) &
+                            (quarterly_df['segment'] == segment) &
+                            (quarterly_df['end_date'] > pd.Timestamp(year=fiscal_year-1, month=12, day=31)) &
+                            (quarterly_df['end_date'] <= fiscal_year_end)
+                        ]
+                        
+                        if len(quarterly_subset) == 3:
+                            q1q2q3_total = quarterly_subset['value'].sum()
+                            annual_total = annual_row['value']
+                            q4_value = annual_total - q1q2q3_total
+                            
+                            q3_end = quarterly_subset['end_date'].max()
+                            
+                            q4_record = {
+                                'tag': tag,
+                                'value': q4_value,
+                                'segment': segment,
+                                'start_date': q3_end + pd.Timedelta(days=1),
+                                'end_date': fiscal_year_end,
+                                'instant_date': None,
+                                'report_date': fiscal_year_end,
+                                'form': '10-Q (Q4 Calculated)',
+                                'accession': annual_row['accession'],
+                                'filing_date': annual_row['filing_date'],
+                                'context_id': f"Q4_{fiscal_year}_{segment}",
+                                'dimension': annual_row.get('dimension'),
+                                'decimals': annual_row.get('decimals'),
+                                'unit': annual_row.get('unit')
+                            }
+                            
+                            q4_records.append(q4_record)
         
         if q4_records:
             q4_df = pd.DataFrame(q4_records)
@@ -562,19 +593,69 @@ class ComprehensiveXBRLExtractor:
         
         return result_df
     
+    def _get_quarter_from_date(self, date_str):
+        """Determine quarter from date string"""
+        try:
+            if isinstance(date_str, str):
+                date_obj = pd.to_datetime(date_str)
+            else:
+                date_obj = date_str
+            
+            month = date_obj.month
+            
+            # Caterpillar's fiscal year ends in December (standard calendar year)
+            # Q1: Jan-Mar (month 3)
+            # Q2: Apr-Jun (month 6)
+            # Q3: Jul-Sep (month 9)
+            # Q4: Oct-Dec (month 12)
+            
+            if month in [1, 2, 3]:
+                return 'Q1'
+            elif month in [4, 5, 6]:
+                return 'Q2'
+            elif month in [7, 8, 9]:
+                return 'Q3'
+            elif month in [10, 11, 12]:
+                return 'Q4'
+            else:
+                return ''
+        except:
+            return ''
+    
     def format_excel_sheet(self, writer, sheet_name, df):
-        """Apply formatting to Excel sheet"""
+        """Apply formatting to Excel sheet with quarter labels"""
         workbook = writer.book
         worksheet = writer.sheets[sheet_name]
         
+        # Insert a new row at the top for quarter labels
+        worksheet.insert_rows(1)
+        
+        # Add quarter labels for each date column
+        for col_idx, col_name in enumerate(df.columns, start=1):
+            if col_name != 'Line_Item':
+                quarter = self._get_quarter_from_date(col_name)
+                cell = worksheet.cell(row=1, column=col_idx)
+                cell.value = quarter
+        
+        # Format the quarter row
+        quarter_format = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        quarter_font = Font(bold=True, color='FFFFFF', size=11)
+        
+        for cell in worksheet[1]:
+            cell.fill = quarter_format
+            cell.font = quarter_font
+            cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Format the date header row (now row 2)
         header_format = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF', size=11)
         
-        for cell in next(worksheet.iter_rows(min_row=1, max_row=1)):
+        for cell in worksheet[2]:
             cell.fill = header_format
             cell.font = header_font
             cell.alignment = Alignment(horizontal='center', vertical='center')
         
+        # Adjust column widths
         for column in worksheet.columns:
             max_length = 0
             column_letter = get_column_letter(column[0].column)
@@ -588,14 +669,16 @@ class ComprehensiveXBRLExtractor:
             adjusted_width = min(max_length + 2, 50)
             worksheet.column_dimensions[column_letter].width = adjusted_width
         
+        # Format number cells (starting from row 3 now)
         accounting_format = '#,##0'
-        for row in worksheet.iter_rows(min_row=2):
+        for row in worksheet.iter_rows(min_row=3):
             for cell in row[1:]:
                 if cell.value is not None and isinstance(cell.value, (int, float)):
                     cell.number_format = accounting_format
                     cell.alignment = Alignment(horizontal='right', vertical='center')
         
-        worksheet.freeze_panes = 'B2'
+        # Update freeze panes to freeze both quarter and date rows
+        worksheet.freeze_panes = 'B3'
     
     def export_to_excel(self, output_filename, start_year=2010):
         """Extract and export all financial data"""
