@@ -1,16 +1,22 @@
-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 SEC EDGAR XBRL Parser - Complete Financial Statement Extractor
 Extracts both consolidated and segment-level data with Q4 calculations
-FIXED VERSION: Corrected COGS matching, date filtering, and syntax issues
+
+This version ensures:
+- Q4 calculations are done **only for Consolidated** (never for segments).
+- Segment tabs exclude any calculated rows; they show only reported quarterlies.
+- Discrete-quarter conversion for YTD 10-Qs is limited to Consolidated only.
 """
+
 import requests
 import pandas as pd
 from datetime import datetime
 import time
 import logging
 import xml.etree.ElementTree as ET
-from openpyxl import load_workbook
+from openpyxl import load_workbook  # noqa: F401 (kept for parity; not used directly)
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from collections import OrderedDict
@@ -59,14 +65,14 @@ class ComprehensiveXBRLExtractor:
                 # Sales and Revenues
                 ('Revenues_MET', ' Sales of Machinery, Energy & Transportation'),
                 ('Revenues_FP', ' Revenues of Financial Products'),
-                ('Revenues', '           Total sales and revenues'),
+                ('Revenues', ' Total sales and revenues'),
                 # Operating Costs
                 ('CostOfRevenue', ' Cost of goods sold'),
                 ('SellingGeneralAndAdministrativeExpense', ' SG&A Expenses'),
                 ('ResearchAndDevelopmentExpense', ' R&D Expenses'),
                 ('FinancingInterestExpense_FP', ' Interest expense of Financial Products'),
                 ('OtherOperatingIncomeExpenseNet', ' Other operating (income) expenses'),
-                ('CostsAndExpenses', '           Total operating costs'),
+                ('CostsAndExpenses', ' Total operating costs'),
                 ('OperatingIncomeLoss', 'Operating Profit'),
                 ('InterestExpenseNonoperating_EXFP', ' Interest expense excluding Financial Products'),
                 ('OtherNonoperatingIncomeExpense', ' Other income (expense)'),
@@ -76,7 +82,7 @@ class ComprehensiveXBRLExtractor:
                 ('IncomeLossFromEquityMethodInvestments', ' Equity in profit (loss) of unconsolidated affiliated companies'),
                 ('ProfitLoss', ' Profit of consolidated and affiliated companies'),
                 ('NetIncomeLossAttributableToNoncontrollingInterest', ' Less: Profit (loss) attributable to noncontrolling interests'),
-                ('NetIncomeLossAvailableToCommonStockholdersBasic', '           Profit (Attributable to Common Stockholders)'),
+                ('NetIncomeLossAvailableToCommonStockholdersBasic', ' Profit (Attributable to Common Stockholders)'),
                 # EPS
                 ('EarningsPerShareBasic', 'Profit per common share'),
                 ('EarningsPerShareDiluted', 'Profit per common share - diluted'),
@@ -112,8 +118,8 @@ class ComprehensiveXBRLExtractor:
                 ('DividendsPayableCurrent', ' Dividends payable'),
                 ('OtherLiabilitiesCurrent', ' Other current liabilities'),
                 # Long-term debt
-                ('LongTermDebtAndCapitalLeaseObligationsCurrent_MET', ' Machinery: Energy & Transportation'),
-                ('LongTermDebtAndCapitalLeaseObligationsCurrent_FP', ' Financial Products'),
+                ('LongTermDebtAndCapitalLeaseObligations_MET', ' Machinery: Energy & Transportation'),
+                ('LongTermDebtAndCapitalLeaseObligations_FP', ' Financial Products'),
                 ('LiabilitiesCurrent', ' Total current liabilities'),
                 ('LongTermDebtAndCapitalLeaseObligations_MET', ' Machinery: Energy & Transportation'),
                 ('LongTermDebtAndCapitalLeaseObligations_FP', ' Financial Products'),
@@ -147,7 +153,7 @@ class ComprehensiveXBRLExtractor:
                 ('IncreaseDecreaseInContractWithCustomerLiability', ' Customer advances'),
                 ('IncreaseDecreaseInOtherOperatingAssets', ' Other assets - net'),
                 ('IncreaseDecreaseInOtherOperatingLiabilities', ' Other liabilities - net'),
-                ('NetCashProvidedByUsedInOperatingActivities', 'Net cash provided by (used for) operating activities'),
+                ('NetCashProvidedByUsedInOperatingActivities', ' Net cash provided by (used for) operating activities'),
                 # Investing Activities
                 ('PaymentsToAcquirePropertyPlantAndEquipment', ' Capital expenditures – excluding equipment leased to others'),
                 ('PaymentsToAcquireEquipmentOnLease', ' Expenditures for equipment leased to others'),
@@ -160,7 +166,7 @@ class ComprehensiveXBRLExtractor:
                 ('ProceedsFromSaleAndMaturityOfMarketableSecurities', ' Proceeds from maturities and sale of securities'),
                 ('PaymentsToAcquireMarketableSecurities', ' Investments in securities'),
                 ('PaymentsForProceedsFromOtherInvestingActivities', ' Other – net'),
-                ('NetCashProvidedByUsedInInvestingActivities', 'Net cash provided by (used for) investing activities'),
+                ('NetCashProvidedByUsedInInvestingActivities', ' Net cash provided by (used for) investing activities'),
                 # Financing Activities
                 ('PaymentsOfDividendsCommonStock', ' Dividends paid'),
                 ('ProceedsFromIssuanceOrSaleOfEquity', ' Common stock issued, and other stock compensation transactions, net'),
@@ -168,14 +174,59 @@ class ComprehensiveXBRLExtractor:
                 ('PaymentsForExciseTaxOnPurchaseOfCommonStock', ' Excise tax paid on purchases of common stock'),
                 ('ProceedsFromDebtMaturingInMoreThanThreeMonths_MET', ' - Machinery, Energy & Transportation'),
                 ('ProceedsFromDebtMaturingInMoreThanThreeMonths_FP', ' - Financial Products'),
-                ('RepaymentsOfDebtMaturingInMoreThanThreeMonths_MET', ' - Machinery, Energy & Transportation'),
-                ('RepaymentsOfDebtMaturingInMoreThanThreeMonths_FP', ' - Financial Products'),
+                ('RepaymentsOfDebtMaturingInMoreThanThreeMonths_MET', 'Payments on debt (Machinery, Energy & Transportation)'),
+                ('RepaymentsOfDebtMaturingInMoreThanThreeMonths_FP', 'Payments on debt (Financial Products)'),
+                ('ProceedsFromDebtMaturingInMoreThanThreeMonths', ' Proceeds from debt issued (Financial Products)'),
                 ('ProceedsFromRepaymentsOfShortTermDebtMaturingInThreeMonthsOrLess', ' Short-term borrowings – net (original maturities three months or less)'),
-                ('NetCashProvidedByUsedInFinancingActivities', 'Net cash provided by (used for) financing activities'),
+                ('NetCashProvidedByUsedInFinancingActivities', ' Net cash provided by (used for) financing activities'),
                 ('EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents', 'Effect of exchange rate changes on cash'),
-                ('CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect', 'Increase (decrease) in cash, cash equivalents and restricted cash'),
+                ('CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect', ' Increase (decrease) in cash, cash equivalents and restricted cash'),
                 ('CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents_Beginning', 'Cash, cash equivalents and restricted cash at beginning of period'),
                 ('CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents_End', 'Cash, cash equivalents and restricted cash at end of period'),
+            ])
+        elif statement_type == 'constructionindustries':
+            return OrderedDict([
+                ('Revenues_CI', 'Sales and Revenues'),
+                ('CostOfRevenue_CI', 'Cost of Goods Sold'),
+                ('SellingGeneralAndAdministrativeResearchAndDevelopment_CI', 'SG&A/R&D '),
+                ('SegmentReportingOtherItemAmount_CI', 'Other segment items'),
+                ('IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments_CI', 'Profit'),
+                ('Assets_CI', 'Assets'),
+                ('DepreciationDepletionAndAmortization_CI', 'Depreciation and Amortization'),
+                ('SegmentExpenditureAdditionToLongLivedAssets_CI', 'Capital Expenditures'),
+            ])
+        elif statement_type == 'resourceindustries':
+            return OrderedDict([
+                ('Revenues_RI', 'Sales and Revenues'),
+                ('CostOfRevenue_RI', 'Cost of Goods Sold'),
+                ('SellingGeneralAndAdministrativeResearchAndDevelopment_RI', 'SG&A/R&D '),
+                ('SegmentReportingOtherItemAmount_RI', 'Other segment items'),
+                ('IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments_RI', 'Profit'),
+                ('Assets_RI', 'Assets'),
+                ('DepreciationDepletionAndAmortization_RI', 'Depreciation and Amortization'),
+                ('SegmentExpenditureAdditionToLongLivedAssets_RI', 'Capital Expenditures'),
+            ])
+        elif statement_type == 'energyandtransportation':
+            return OrderedDict([
+                ('Revenues_ET', 'Sales and Revenues'),
+                ('CostOfRevenue_ET', 'Cost of Goods Sold'),
+                ('SellingGeneralAndAdministrativeResearchAndDevelopment_ET', 'SG&A/R&D '),
+                ('SegmentReportingOtherItemAmount_ET', 'Other segment items'),
+                ('IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments_ET', 'Profit'),
+                ('Assets_ET', 'Assets'),
+                ('DepreciationDepletionAndAmortization_ET', 'Depreciation and Amortization'),
+                ('SegmentExpenditureAdditionToLongLivedAssets_ET', 'Capital Expenditures'),
+            ])
+        elif statement_type == 'financialproducts':
+            return OrderedDict([
+                ('Revenues_FP', 'Sales and Revenues'),
+                ('CostOfRevenue_FP', 'Cost of Goods Sold'),
+                ('SellingGeneralAndAdministrativeResearchAndDevelopment_FP', 'SG&A/R&D '),
+                ('SegmentReportingOtherItemAmount_FP', 'Other segment items'),
+                ('IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments_FP', 'Profit'),
+                ('Assets_FP', 'Assets'),
+                ('DepreciationDepletionAndAmortization_FP', 'Depreciation and Amortization'),
+                ('SegmentExpenditureAdditionToLongLivedAssets_FP', 'Capital Expenditures'),
             ])
         else:
             logger.warning(f"Unknown statement type: {statement_type}")
@@ -188,83 +239,115 @@ class ComprehensiveXBRLExtractor:
         This helps when companies use different but equivalent tags.
         """
         return {
-            # Revenues family
-            'Revenues': [
-                'Revenues',
-                'SalesRevenueNet',
-                'SalesAndRevenue',
-                'SalesRevenueGoodsNet',
-                'SalesRevenueServicesNet',
-                'RevenueFromContractWithCustomerExcludingAssessedTax'
-            ],
-            'SellingGeneralAndAdministrativeExpense': [
-                'SellingGeneralAndAdministrativeExpense'
-            ],
-            'ResearchAndDevelopmentExpense': [
-                'ResearchAndDevelopmentExpense'
-            ],
-            'OtherOperatingIncomeExpenseNet': [
-                'OtherOperatingIncomeExpenseNet',
-                'OtherOperatingIncomeExpense'
-            ],
-            'CostsAndExpenses': [
-                'CostsAndExpenses',
-                'OperatingExpenses'
-            ],
-            'OperatingIncomeLoss': [
-                'OperatingIncomeLoss'
-            ],
-            'InterestExpenseNonoperating': [
-                'InterestExpenseNonoperating',
-                'InterestAndDebtExpense'
-            ],
-            'InterestExpenseNonoperating_EXFP': [
-                'InterestExpense_EXFP',
-                'InterestExpenseExcludingFinancialProducts'
-            ],
-            'OtherNonoperatingIncomeExpense': [
-                'OtherNonoperatingIncomeExpense',
-                'NonoperatingIncomeExpense'
-            ],
-            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments': [
-                'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments',
-                'IncomeLossFromContinuingOperationsBeforeIncomeTaxes'
-            ],
-            'IncomeTaxExpenseBenefit': [
-                'IncomeTaxExpenseBenefit'
-            ],
-            # Company often discloses equity affiliates separately
-            'IncomeLossFromEquityMethodInvestments': [
-                'IncomeLossFromEquityMethodInvestments'
-            ],
-            # Net Income / Profit
-            'ProfitLoss': [
-                'ProfitLoss',
-                'NetIncomeLoss'
-            ],
-            'NetIncomeLossAttributableToNoncontrollingInterest': [
-                'NetIncomeLossAttributableToNoncontrollingInterest'
-            ],
-            'NetIncomeLossAvailableToCommonStockholdersBasic': [
-                'NetIncomeLossAvailableToCommonStockholdersBasic'
-            ],
-            'EarningsPerShareBasic': [
-                'EarningsPerShareBasic'
-            ],
-            'EarningsPerShareDiluted': [
-                'EarningsPerShareDiluted'
-            ],
-            'WeightedAverageNumberOfSharesOutstandingBasic': [
-                'WeightedAverageNumberOfSharesOutstandingBasic'
-            ],
-            'WeightedAverageNumberOfDilutedSharesOutstanding': [
-                'WeightedAverageNumberOfDilutedSharesOutstanding'
-            ],
-            'FinancingInterestExpense_FP': [
-                'InterestExpense',
-                'InterestAndDebtExpense',
-                'InterestExpenseOfFinancialProducts'
-            ]
+            'Revenues': ['Revenues','SalesRevenueNet','SalesAndRevenue','SalesRevenueGoodsNet','SalesRevenueServicesNet','RevenueFromContractWithCustomerExcludingAssessedTax'],
+            'SellingGeneralAndAdministrativeExpense': ['SellingGeneralAndAdministrativeExpense'],
+            'ResearchAndDevelopmentExpense': ['ResearchAndDevelopmentExpense'],
+            'OtherOperatingIncomeExpenseNet': ['OtherOperatingIncomeExpenseNet','OtherOperatingIncomeExpense'],
+            'CostsAndExpenses': ['CostsAndExpenses','OperatingExpenses'],
+            'OperatingIncomeLoss': ['OperatingIncomeLoss'],
+            'InterestExpenseNonoperating': ['InterestExpenseNonoperating','InterestAndDebtExpense'],
+            'InterestExpenseNonoperating_EXFP': ['InterestExpense_EXFP','InterestExpenseExcludingFinancialProducts'],
+            'OtherNonoperatingIncomeExpense': ['OtherNonoperatingIncomeExpense','NonoperatingIncomeExpense'],
+            'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments': ['IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments','IncomeLossFromContinuingOperationsBeforeIncomeTaxes'],
+            'IncomeTaxExpenseBenefit': ['IncomeTaxExpenseBenefit'],
+            'IncomeLossFromEquityMethodInvestments': ['IncomeLossFromEquityMethodInvestments'],
+            'ProfitLoss': ['ProfitLoss','NetIncomeLoss'],
+            'NetIncomeLossAttributableToNoncontrollingInterest': ['NetIncomeLossAttributableToNoncontrollingInterest'],
+            'NetIncomeLossAvailableToCommonStockholdersBasic': ['NetIncomeLossAvailableToCommonStockholdersBasic'],
+            'EarningsPerShareBasic': ['EarningsPerShareBasic'],
+            'EarningsPerShareDiluted': ['EarningsPerShareDiluted'],
+            'WeightedAverageNumberOfSharesOutstandingBasic': ['WeightedAverageNumberOfSharesOutstandingBasic'],
+            'WeightedAverageNumberOfDilutedSharesOutstanding': ['WeightedAverageNumberOfDilutedSharesOutstanding'],
+            'FinancingInterestExpense_FP': ['InterestExpense','InterestAndDebtExpense','InterestExpenseOfFinancialProducts'],
+            'CashAndCashEquivalentsAtCarryingValue' : ['CashCashEquivalentsAndShortTermInvestments']
+        }
+
+    def _get_balance_tag_candidates(self):
+        """
+        Alias map for balance sheet line items (common US-GAAP variants).
+        Used to locate equivalent concepts when filers use alternative tags.
+        """
+        return {
+            'CashAndCashEquivalentsAtCarryingValue': ['CashAndCashEquivalentsAtCarryingValue','CashCashEquivalentsAtCarryingValue','CashAndCashEquivalentsFairValueDisclosure','CashCashEquivalentsAndShortTermInvestments'],
+            'AccountsReceivableNetCurrent': ['AccountsReceivableNetCurrent','AccountsReceivableNet','TradeAccountsReceivableNet','ReceivablesNetCurrent'],
+            'NotesAndLoansReceivableNetCurrent': ['NotesAndLoansReceivableNetCurrent','LoansAndLeasesReceivableNetCurrent','FinanceReceivableCurrent'],
+            'PrepaidExpenseAndOtherAssetsCurrent': ['PrepaidExpenseAndOtherAssetsCurrent','PrepaidExpenseCurrent','OtherAssetsCurrent'],
+            'InventoryNet': ['InventoryNet','InventoriesNet','InventoryFinishedGoods'],
+            'AssetsCurrent': ['AssetsCurrent','CurrentAssets'],
+            'PropertyPlantAndEquipmentNet': ['PropertyPlantAndEquipmentNet','PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization'],
+            'AccountsReceivableNetNoncurrent': ['AccountsReceivableNetNoncurrent','AccountsAndLoansReceivableNetNoncurrent'],
+            'NotesAndLoansReceivableNetNoncurrent': ['NotesAndLoansReceivableNetNoncurrent','LoansAndLeasesReceivableNetNoncurrent','FinanceReceivableNoncurrent'],
+            'NoncurrentDeferredAndRefundableIncomeTaxes': ['NoncurrentDeferredAndRefundableIncomeTaxes','DeferredTaxAssetsNetNoncurrent'],
+            'IntangibleAssetsNetExcludingGoodwill': ['IntangibleAssetsNetExcludingGoodwill','FiniteLivedIntangibleAssetsNet'],
+            'Goodwill': ['Goodwill'],
+            'OtherAssetsNoncurrent': ['OtherAssetsNoncurrent','OtherNoncurrentAssets'],
+            'Assets': ['Assets','TotalAssets'],
+            'ShortTermBorrowings_FinancialProducts': ['ShortTermBorrowings','CommercialPaper','ShortTermDebt'],
+            'AccountsPayableCurrent': ['AccountsPayableCurrent','TradeAccountsPayableCurrent'],
+            'AccruedLiabilitiesCurrent': ['AccruedLiabilitiesCurrent','AccruedExpensesCurrent'],
+            'EmployeeRelatedLiabilitiesCurrent': ['EmployeeRelatedLiabilitiesCurrent','AccruedCompensationCurrent'],
+            'ContractWithCustomerLiabilityCurrent': ['ContractWithCustomerLiabilityCurrent','DeferredRevenueCurrent','CustomerAdvancesCurrent'],
+            'DividendsPayableCurrent': ['DividendsPayableCurrent'],
+            'OtherLiabilitiesCurrent': ['OtherLiabilitiesCurrent','OtherCurrentLiabilities'],
+            'LiabilitiesCurrent': ['LiabilitiesCurrent','CurrentLiabilities'],
+            'LongTermDebtAndCapitalLeaseObligations': ['LongTermDebtAndCapitalLeaseObligations','LongTermDebtNoncurrent','LongTermDebt'],
+            'LongTermDebtAndCapitalLeaseObligationsCurrent': ['LongTermDebtAndCapitalLeaseObligationsCurrent','LongTermDebtCurrent'],
+            'PensionAndOtherPostretirementAndPostemploymentBenefitPlansLiabilitiesNoncurrent': ['PensionAndOtherPostretirementAndPostemploymentBenefitPlansLiabilitiesNoncurrent','EmployeeRelatedLiabilitiesNoncurrent'],
+            'OtherLiabilitiesNoncurrent': ['OtherLiabilitiesNoncurrent','OtherNoncurrentLiabilities'],
+            'Liabilities': ['Liabilities','TotalLiabilities'],
+            'CommonStocksIncludingAdditionalPaidInCapital': ['CommonStocksIncludingAdditionalPaidInCapital','CommonStockValue','AdditionalPaidInCapital'],
+            'TreasuryStockValue': ['TreasuryStockValue','TreasuryStockCommon'],
+            'RetainedEarningsAccumulatedDeficit': ['RetainedEarningsAccumulatedDeficit','RetainedEarnings'],
+            'AccumulatedOtherComprehensiveIncomeLossNetOfTax': ['AccumulatedOtherComprehensiveIncomeLossNetOfTax','AccumulatedOtherComprehensiveIncome'],
+            'MinorityInterest': ['MinorityInterest','NoncontrollingInterest'],
+            'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest': ['StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest','StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest','StockholdersEquity'],
+            'LiabilitiesAndStockholdersEquity': ['LiabilitiesAndStockholdersEquity','LiabilitiesAndStockholdersEquity']
+        }
+
+    def _get_cashflow_tag_candidates(self):
+        """
+        Alias map for cash flow line items (common US-GAAP variants + near-equivalents).
+        Expand with company extensions (e.g., cat:*) after inspecting df['tag'].
+        """
+        return {
+            'ProfitLoss': ['ProfitLoss', 'NetIncomeLoss'],
+            'DepreciationDepletionAndAmortization': ['DepreciationDepletionAndAmortization','DepreciationAndAmortization','DepreciationAmortizationAndAccretionNet'],
+            'DeferredIncomeTaxExpenseBenefit': ['DeferredIncomeTaxExpenseBenefit','DeferredIncomeTaxesAndTaxCredits'],
+            'NonCashGainLossOnDivestiture': ['GainLossOnSaleOfBusiness','NoncashOrPartNoncashAcquisitionOrDisposition'],
+            'OtherNoncashIncomeExpense': ['OtherNoncashIncomeExpense','OtherNoncashOperatingActivities'],
+            'IncreaseDecreaseInReceivables': ['IncreaseDecreaseInReceivables','IncreaseDecreaseInAccountsReceivable','IncreaseDecreaseInAccountsAndNotesReceivable','IncreaseDecreaseInTradeAccountsReceivable'],
+            'IncreaseDecreaseInInventories': ['IncreaseDecreaseInInventories','IncreaseDecreaseInInventory'],
+            'IncreaseDecreaseInAccountsPayable': ['IncreaseDecreaseInAccountsPayable','IncreaseDecreaseInTradeAccountsPayable'],
+            'IncreaseDecreaseInAccruedLiabilities': ['IncreaseDecreaseInAccruedLiabilities','IncreaseDecreaseInAccruedExpensesAndOtherLiabilities'],
+            'IncreaseDecreaseInEmployeeRelatedLiabilities': ['IncreaseDecreaseInEmployeeRelatedLiabilities','IncreaseDecreaseInAccruedPayrollAndBenefits'],
+            'IncreaseDecreaseInContractWithCustomerLiability': ['IncreaseDecreaseInContractWithCustomerLiability','IncreaseDecreaseInDeferredRevenue','IncreaseDecreaseInCustomerAdvances'],
+            'IncreaseDecreaseInOtherOperatingAssets': ['IncreaseDecreaseInOtherOperatingAssets','IncreaseDecreaseInOtherAssets'],
+            'IncreaseDecreaseInOtherOperatingLiabilities': ['IncreaseDecreaseInOtherOperatingLiabilities','IncreaseDecreaseInOtherLiabilities'],
+            'NetCashProvidedByUsedInOperatingActivities': ['NetCashProvidedByUsedInOperatingActivities','NetCashProvidedByUsedInOperatingActivitiesContinuingOperations'],
+            'PaymentsToAcquirePropertyPlantAndEquipment': ['PaymentsToAcquirePropertyPlantAndEquipment','CapitalExpenditures'],
+            'PaymentsToAcquireEquipmentOnLease': ['PaymentsToAcquireEquipmentOnLease','PaymentsToAcquireEquipmentLeasedToOthers'],
+            'ProceedsFromSaleOfPropertyPlantAndEquipment': ['ProceedsFromSaleOfPropertyPlantAndEquipment','ProceedsFromSalesOfPropertyPlantAndEquipment','ProceedsFromDisposalsOfLeasedAssetsAndPropertyPlantAndEquipment'],
+            'PaymentsToAcquireFinanceReceivables': ['PaymentsToAcquireFinanceReceivables','IncreaseInFinanceReceivables'],
+            'ProceedsFromCollectionOfFinanceReceivables': ['ProceedsFromCollectionOfFinanceReceivables','CollectionsOfFinanceReceivables'],
+            'ProceedsFromSaleOfFinanceReceivables': ['ProceedsFromSaleOfFinanceReceivables'],
+            'PaymentsToAcquireBusinessesNetOfCashAcquired': ['PaymentsToAcquireBusinessesNetOfCashAcquired','PaymentsForBusinessCombinationsNetOfCashAcquired'],
+            'ProceedsFromDivestitureOfBusinessesNetOfCashDivested': ['ProceedsFromDivestitureOfBusinessesNetOfCashDivested','ProceedsFromSaleOfBusinessNetOfCashDisposed'],
+            'ProceedsFromSaleAndMaturityOfMarketableSecurities': ['ProceedsFromSaleAndMaturityOfMarketableSecurities','ProceedsFromMaturiesSaleOfInvestments','ProceedsFromMaturitiesSaleOfInvestments'],
+            'PaymentsToAcquireMarketableSecurities': ['PaymentsToAcquireMarketableSecurities','PaymentsToAcquireInvestments'],
+            'PaymentsForProceedsFromOtherInvestingActivities': ['PaymentsForProceedsFromOtherInvestingActivities','OtherInvestingActivitiesNet'],
+            'NetCashProvidedByUsedInInvestingActivities': ['NetCashProvidedByUsedInInvestingActivities'],
+            'PaymentsOfDividendsCommonStock': ['PaymentsOfDividendsCommonStock','PaymentsOfDividends'],
+            'ProceedsFromIssuanceOrSaleOfEquity': ['ProceedsFromIssuanceOrSaleOfEquity','ProceedsFromStockOptionsExercised'],
+            'PaymentsForRepurchaseOfCommonStock': ['PaymentsForRepurchaseOfCommonStock','PaymentsForRepurchaseOfEquity'],
+            'PaymentsForExciseTaxOnPurchaseOfCommonStock': ['PaymentsForExciseTaxOnPurchaseOfCommonStock'],
+            'ProceedsFromDebtMaturingInMoreThanThreeMonths': ['ProceedsFromDebtMaturingInMoreThanThreeMonths','ProceedsFromIssuanceOfLongTermDebt'],
+            'RepaymentsOfDebtMaturingInMoreThanThreeMonths': ['RepaymentsOfDebtMaturingInMoreThanThreeMonths','RepaymentsOfLongTermDebt'],
+            'ProceedsFromRepaymentsOfShortTermDebtMaturingInThreeMonthsOrLess': ['ProceedsFromRepaymentsOfShortTermDebtMaturingInThreeMonthsOrLess','ProceedsFromRepaymentsOfShortTermDebt'],
+            'NetCashProvidedByUsedInFinancingActivities': ['NetCashProvidedByUsedInFinancingActivities'],
+            'EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents': ['EffectOfExchangeRateOnCashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents','EffectOfExchangeRateOnCashAndCashEquivalents'],
+            'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect': ['CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect','CashAndCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect'],
+            'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents_Beginning': ['CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsBeginningBalance','CashAndCashEquivalentsAtCarryingValueBeginningBalance'],
+            'CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents_End': ['CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents','CashAndCashEquivalentsAtCarryingValue']
         }
 
     def get_all_filings(self, start_date=None):
@@ -281,7 +364,6 @@ class ComprehensiveXBRLExtractor:
             time.sleep(0.1)
             data = response.json()
             recent = data['filings']['recent']
-
             filings = []
             for i in range(len(recent['form'])):
                 form = recent['form'][i]
@@ -296,7 +378,6 @@ class ComprehensiveXBRLExtractor:
                             'form': form,
                             'primary_document': recent['primaryDocument'][i]
                         })
-            
             filings.sort(key=lambda x: x['report_date'])
             logger.info(f"Found {len(filings)} filings since {start_date}")
             return filings
@@ -309,7 +390,6 @@ class ComprehensiveXBRLExtractor:
         accession_no_dash = accession.replace('-', '')
         date_obj = datetime.strptime(report_date, '%Y-%m-%d')
         date_str = date_obj.strftime('%Y%m%d')
-        # FIXED: Removed redundant 'or' clause
         url = f"{self.sec_archives}/{self.cik_int}/{accession_no_dash}/{self.ticker}-{date_str}_htm.xml"
         return url
 
@@ -356,13 +436,11 @@ class ComprehensiveXBRLExtractor:
     def extract_facts_from_xbrl(self, xml_content):
         """Extract all facts from XBRL instance"""
         root = ET.fromstring(xml_content)
-
         # Update namespaces from document
         for prefix, uri in root.attrib.items():
             if prefix.startswith('{http://www.w3.org/2000/xmlns/}'):
                 ns_prefix = prefix.split('}')[1]
                 self.namespaces[ns_prefix] = uri
-
         contexts = self.parse_context_elements(root)
         facts = []
         for elem in root.iter():
@@ -370,10 +448,8 @@ class ComprehensiveXBRLExtractor:
             context_ref = elem.get('contextRef')
             unit_ref = elem.get('unitRef')
             decimals = elem.get('decimals')
-
             if context_ref in contexts and elem.text:
                 context = contexts[context_ref]
-
                 # Default to consolidated unless a segment is present
                 segment_name = "Consolidated"
                 segment_dimension = None
@@ -382,12 +458,10 @@ class ComprehensiveXBRLExtractor:
                         segment_name = member
                         segment_dimension = dim
                         break
-
                 try:
                     value = float(elem.text)
                 except (ValueError, TypeError):
                     continue
-
                 fact = {
                     'tag': tag_name,
                     'value': value,
@@ -401,7 +475,6 @@ class ComprehensiveXBRLExtractor:
                     'unit': unit_ref
                 }
                 facts.append(fact)
-
         return facts
 
     def process_filing(self, filing):
@@ -416,7 +489,7 @@ class ComprehensiveXBRLExtractor:
                 fact['filing_date'] = filing['filing_date']
                 fact['report_date'] = filing['report_date']
                 fact['form'] = filing['form']
-            logger.info(f"  Extracted {len(facts)} facts")
+            logger.info(f" Extracted {len(facts)} facts")
             return facts
         except Exception as e:
             logger.error(f"Error processing filing: {e}")
@@ -434,7 +507,6 @@ class ComprehensiveXBRLExtractor:
             logger.info(f"\n[{i}/{len(filings)}] " + "=" * 50)
             facts = self.process_filing(filing)
             all_facts.extend(facts)
-
         df = pd.DataFrame(all_facts)
         if not df.empty:
             for date_col in ['start_date', 'end_date', 'instant_date', 'filing_date', 'report_date']:
@@ -442,8 +514,7 @@ class ComprehensiveXBRLExtractor:
                     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
             sort_col = 'end_date' if 'end_date' in df.columns else 'instant_date'
             df = df.sort_values([sort_col, 'tag', 'segment'], ascending=[True, True, True])
-
-        logger.info(f"\nTotal facts extracted: {len(df)}")
+            logger.info(f"\nTotal facts extracted: {len(df)}")
         return df
 
     # --- Helpers for Q4 calculation ---
@@ -461,12 +532,11 @@ class ComprehensiveXBRLExtractor:
     def calculate_q4_data(self, df):
         """
         Calculate Q4 by subtracting YTD or available quarters from annual for flow statements,
-        and copy 10-K data for balance sheet.
+        and copy 10-K data for balance sheet. **Consolidated only**.
         """
         logger.info("\n" + "=" * 60)
-        logger.info("Calculating Q4 data")
+        logger.info("Calculating Q4 data (Consolidated only)")
         logger.info("=" * 60)
-
         if df.empty:
             return df
 
@@ -475,10 +545,8 @@ class ComprehensiveXBRLExtractor:
 
         q4_records = []
         unique_tags = df['tag'].dropna().unique()
-        unique_segments = df['segment'].dropna().unique().tolist()
-        # Also allow NA/None as consolidated
-        if 'Consolidated' not in unique_segments:
-            unique_segments.append('Consolidated')
+        # Only compute for Consolidated
+        unique_segments = ['Consolidated']
 
         for tag in unique_tags:
             for segment in unique_segments:
@@ -491,8 +559,9 @@ class ComprehensiveXBRLExtractor:
                 ].copy()
 
                 for _, annual_row in annual_subset.iterrows():
-                    # Check whether balance sheet (instant) or flow (period)
+                    # Balance (instant) vs flow (period)
                     is_balance_sheet = pd.notna(annual_row.get('instant_date'))
+
                     if is_balance_sheet:
                         fiscal_year_end = annual_row['instant_date']
                         if pd.isna(fiscal_year_end):
@@ -532,23 +601,21 @@ class ComprehensiveXBRLExtractor:
                     ].copy()
 
                     if q_subset.empty:
-                        # No quarterly data at all to compute Q4
                         continue
 
-                    # Detect if any quarter is YTD (common in 10-Qs)
                     q_subset['is_ytd'] = q_subset.apply(self._is_calendar_ytd, axis=1)
 
                     annual_total = annual_row['value']
                     q3_end = q_subset['end_date'].max()
 
                     if q_subset['is_ytd'].any():
-                        # Use the latest YTD (typically Q3)
                         latest_ytd = q_subset.sort_values('end_date').iloc[-1]
                         q4_value = annual_total - latest_ytd['value']
-                        logger.debug(f"[Q4 YTD] tag={tag} segment={segment} FY={fiscal_year} "
-                                     f"Annual={annual_total} - Q3YTD={latest_ytd['value']} -> Q4={q4_value}")
+                        logger.debug(
+                            f"[Q4 YTD] tag={tag} segment={segment} FY={fiscal_year} "
+                            f"Annual={annual_total} - Q3YTD={latest_ytd['value']} -> Q4={q4_value}"
+                        )
                     else:
-                        # Discrete quarters; sum whatever exists (1..3)
                         sum_quarters = q_subset['value'].sum()
                         q4_value = annual_total - sum_quarters
                         if len(q_subset) != 3:
@@ -580,10 +647,44 @@ class ComprehensiveXBRLExtractor:
             # Keep chronological order by period/instant, then tag, then segment
             if 'end_date' in combined_df.columns:
                 combined_df = combined_df.sort_values(['end_date', 'instant_date', 'tag', 'segment'])
-            logger.info(f"Added {len(q4_records)} Q4 records")
+            logger.info(f"Added {len(q4_records)} Q4 records (Consolidated only)")
             return combined_df
 
         return df
+
+    def make_quarters_discrete(self, df):
+        """
+        Convert 10-Q YTD cash flow/income values to discrete quarter values by differencing.
+        **Consolidated only**; leaves segment rows unchanged. Skips '10-Q (Q4 Calculated)'.
+        """
+        if df.empty:
+            return df
+
+        # Real 10-Q rows, exclude calculated Q4
+        is_real_q = (df['form'] == '10-Q') & df['end_date'].notna()
+        q = df[is_real_q].copy()
+
+        # Only apply differencing for Consolidated (including None)
+        consolidated_mask = (q['segment'].isna()) | (q['segment'] == 'Consolidated')
+        q_cons = q[consolidated_mask].copy()
+        q_cons['is_ytd'] = q_cons.apply(self._is_calendar_ytd, axis=1)
+
+        out = []
+        if not q_cons.empty:
+            for (tag, segment, fy), g in q_cons.groupby(['tag', 'segment', q_cons['end_date'].dt.year]):
+                g = g.sort_values('end_date')
+                if g['is_ytd'].any():
+                    vals = g['value'].values
+                    g = g.copy()
+                    # Q1_discrete = Q1_YTD; Q2_discrete = Q2_YTD - Q1_YTD; etc.
+                    import numpy as np
+                    g['value'] = np.diff(vals, prepend=0)
+                out.append(g)
+        q_discrete = pd.concat(out) if out else q_cons
+
+        # Merge back: keep all other rows (segments & non-10Q) untouched
+        df_other = df[~is_real_q | ~consolidated_mask]
+        return pd.concat([df_other, q_discrete], ignore_index=True)
 
     def create_statement_pivot(self, df, statement_type):
         """Create pivot table for a financial statement in proper order"""
@@ -606,18 +707,32 @@ class ComprehensiveXBRLExtractor:
         # Filter to quarterly data only (includes "10-Q (Q4 Calculated)")
         df_filtered = df_filtered[df_filtered['form'].str.contains('10-Q', na=False)]
 
+        # If building a segment statement, exclude any calculated rows outright
+        segment_statement_types = {
+            'constructionindustries', 'resourceindustries',
+            'energyandtransportation', 'financialproducts'
+        }
+        if statement_type in segment_statement_types:
+            df_filtered = df_filtered[df_filtered['form'] != '10-Q (Q4 Calculated)']
+
         # Normalize segment text for safety (prevent None comparisons)
         df_filtered['segment'] = df_filtered['segment'].fillna('Consolidated')
 
-        # Candidate tags for income statement
+        # Candidate tag maps
         income_tag_map = self._get_income_tag_candidates() if statement_type == 'income' else {}
+        cashflow_tag_map = self._get_cashflow_tag_candidates() if statement_type == 'cashflow' else {}
+        balance_tag_map = self._get_balance_tag_candidates() if statement_type == 'balance' else {}
 
         # Map segment suffix to expected member names
         segment_map = {
             'FP': 'FinancialProductsMember',
             'MET': 'MachineryEnergyTransportationMember',
             'EXFP': 'AllOtherExcludingFinancialProductsMember',
-            'Total': 'Consolidated'
+            'Total': 'Consolidated',
+            'CI': 'ConstructionIndustriesMember',
+            'RI': 'ResourceIndustriesMember',
+            'ET': 'EnergyAndTransportationMember',
+            'FPS': 'FinancialProductsSegmentMember'
         }
 
         pivot_data = []
@@ -633,8 +748,11 @@ class ComprehensiveXBRLExtractor:
 
             # Determine candidate tags
             if statement_type == 'income':
-                # Use candidate list if available; otherwise fall back to the exact key
                 candidate_tags = income_tag_map.get(base_key, [base_key])
+            elif statement_type == 'cashflow':
+                candidate_tags = cashflow_tag_map.get(base_key, [base_key])
+            elif statement_type == 'balance':
+                candidate_tags = balance_tag_map.get(base_key, [base_key])
             else:
                 candidate_tags = [base_key if segment_suffix else tag_key] if segment_suffix else [tag_key]
 
@@ -650,7 +768,13 @@ class ComprehensiveXBRLExtractor:
                 if subset.empty:
                     subset = df_filtered[
                         (df_filtered['tag'].isin(candidate_tags)) &
-                        (df_filtered['segment'].str.contains(target_segment, case=False, na=False))
+                        (df_filtered['segment'].str.contains(str(target_segment), case=False, na=False))
+                    ]
+                # Last-resort: weak keyword match on tag
+                if subset.empty:
+                    subset = df_filtered[
+                        df_filtered['tag'].str.contains(base_key, case=False, regex=False, na=False) &
+                        (df_filtered['segment'] == target_segment)
                     ]
             else:
                 # Consolidated / no segment
@@ -658,6 +782,11 @@ class ComprehensiveXBRLExtractor:
                     (df_filtered['tag'].isin(candidate_tags)) &
                     (df_filtered['segment'].isin(['Consolidated', '']))
                 ]
+                if subset.empty:
+                    subset = df_filtered[
+                        df_filtered['tag'].str.contains(base_key, case=False, regex=False, na=False) &
+                        (df_filtered['segment'].isin(['Consolidated', '']))
+                    ]
 
             if not subset.empty:
                 pivot_row = subset.pivot_table(
@@ -675,11 +804,26 @@ class ComprehensiveXBRLExtractor:
             return pd.DataFrame()
 
         result_df = pd.DataFrame(pivot_data)
-
         # Sort columns by date (most recent first), keeping Line_Item first
         date_columns = [col for col in result_df.columns if col != 'Line_Item']
-        date_columns_sorted = sorted(date_columns, reverse=True)
-        result_df = result_df[['Line_Item'] + date_columns_sorted]
+        # Convert any pandas Timestamps to strings 'YYYY-MM-DD' for ordering & output
+        normalized_cols = []
+        for col in date_columns:
+            if isinstance(col, pd.Timestamp):
+                normalized_cols.append(col)
+            else:
+                try:
+                    normalized_cols.append(pd.to_datetime(col))
+                except Exception:
+                    normalized_cols.append(col)
+        # Reorder
+        try:
+            order = list(sorted([c for c in normalized_cols if isinstance(c, pd.Timestamp)], reverse=True))
+        except Exception:
+            order = date_columns
+        # Build final columns
+        final_cols = ['Line_Item'] + order
+        result_df = result_df.reindex(columns=final_cols)
 
         # Format column names that are datetimes to YYYY-MM-DD
         formatted_cols = []
@@ -689,7 +833,6 @@ class ComprehensiveXBRLExtractor:
             else:
                 formatted_cols.append(col)
         result_df.columns = formatted_cols
-
         return result_df
 
     def _get_quarter_from_date(self, date_str):
@@ -788,9 +931,10 @@ class ComprehensiveXBRLExtractor:
             return None
 
         df = self.calculate_q4_data(df)
+        df = self.make_quarters_discrete(df)
 
         with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
-            # Raw data
+            # Raw data (reported + consolidated calculated rows)
             df.to_excel(writer, sheet_name='All Data - Raw', index=False)
             self.format_excel_sheet(writer, 'All Data - Raw', df)
 
@@ -815,6 +959,34 @@ class ComprehensiveXBRLExtractor:
                 cashflow_pivot.to_excel(writer, sheet_name='Cash Flow - Quarterly', index=False)
                 self.format_excel_sheet(writer, 'Cash Flow - Quarterly', cashflow_pivot)
 
+            # Construction Industries Segment
+            logger.info("Creating Construction Industries Segment Statement")
+            constructionindustries_pivot = self.create_statement_pivot(df, 'constructionindustries')
+            if not constructionindustries_pivot.empty:
+                constructionindustries_pivot.to_excel(writer, sheet_name='Construction Industries', index=False)
+                self.format_excel_sheet(writer, 'Construction Industries', constructionindustries_pivot)
+
+            # Resource Industries Segment
+            logger.info("Creating Resource Industries Segment Statement")
+            resourceindustries_pivot = self.create_statement_pivot(df, 'resourceindustries')
+            if not resourceindustries_pivot.empty:
+                resourceindustries_pivot.to_excel(writer, sheet_name='Resource Industries - Quarterly', index=False)
+                self.format_excel_sheet(writer, 'Resource Industries - Quarterly', resourceindustries_pivot)
+
+            # Energy & Transportation Segment
+            logger.info("Creating Energy & Transportation Segment Statement")
+            energyandtransportation_pivot = self.create_statement_pivot(df, 'energyandtransportation')
+            if not energyandtransportation_pivot.empty:
+                energyandtransportation_pivot.to_excel(writer, sheet_name='Energy & Transportation - Quarterly', index=False)
+                self.format_excel_sheet(writer, 'Energy & Transportation - Quarterly', energyandtransportation_pivot)
+
+            # Financial Products Segment
+            logger.info("Creating Financial Products Segment Statement")
+            financialproducts_pivot = self.create_statement_pivot(df, 'financialproducts')
+            if not financialproducts_pivot.empty:
+                financialproducts_pivot.to_excel(writer, sheet_name='Financial Products - Quarterly', index=False)
+                self.format_excel_sheet(writer, 'Financial Products - Quarterly', financialproducts_pivot)
+
         logger.info("=" * 60)
         logger.info(f"Export complete! File saved: {output_filename}")
         logger.info("=" * 60)
@@ -837,7 +1009,7 @@ def main():
     )
 
     output_file = extractor.export_to_excel(
-        output_filename='caterpillar_financials_fixed.xlsx',
+        output_filename='caterpillar_financials.xlsx',
         start_date=START_DATE
     )
 
@@ -845,10 +1017,14 @@ def main():
         print(f"\nSuccess! Complete financial data exported to: {output_file}")
         print(f"\nData range: {START_DATE} - Present")
         print("\nThe Excel file contains:")
-        print("  Income Statement - Quarterly")
-        print("  Balance Sheet - Quarterly")
-        print("  Cash Flow Statement - Quarterly")
-        print("  All raw data")
+        print(" Income Statement - Quarterly")
+        print(" Balance Sheet - Quarterly")
+        print(" Cash Flow Statement - Quarterly")
+        print(" Construction Industries Segment - Quarterly")
+        print(" Resource Industries Segment - Quarterly")
+        print(" Energy & Transportation Segment - Quarterly")
+        print(" Financial Products Segment - Quarterly")
+        print(" All raw data")
 
 
 if __name__ == "__main__":
