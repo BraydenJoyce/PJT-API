@@ -2,7 +2,7 @@
 """
 SEC EDGAR XBRL Parser - Complete Financial Statement Extractor
 Extracts both consolidated and segment-level data with Q4 calculations
-(Minimal Patch: YTD-aware Q4 + robust income tag matching + safer segment matching)
+FIXED VERSION: Corrected COGS matching, date filtering, and syntax issues
 """
 import requests
 import pandas as pd
@@ -58,25 +58,25 @@ class ComprehensiveXBRLExtractor:
             return OrderedDict([
                 # Sales and Revenues
                 ('Revenues_MET', ' Sales of Machinery, Energy & Transportation'),
-                ('Revenues_FinancialProducts', ' Revenues of Financial Products'),
-                ('Revenues_Total', ' Total sales and revenues'),
+                ('Revenues_FP', ' Revenues of Financial Products'),
+                ('Revenues', '           Total sales and revenues'),
                 # Operating Costs
                 ('CostOfRevenue', ' Cost of goods sold'),
                 ('SellingGeneralAndAdministrativeExpense', ' SG&A Expenses'),
                 ('ResearchAndDevelopmentExpense', ' R&D Expenses'),
-                ('FinancingInterestExpense_FinancialProducts', ' Interest expense of Financial Products'),
+                ('FinancingInterestExpense_FP', ' Interest expense of Financial Products'),
                 ('OtherOperatingIncomeExpenseNet', ' Other operating (income) expenses'),
-                ('CostsAndExpenses', ' Total operating costs'),
+                ('CostsAndExpenses', '           Total operating costs'),
                 ('OperatingIncomeLoss', 'Operating Profit'),
-                ('InterestExpenseNonoperating_EXFP' or 'InterestExpenseExcludingFinancialProducts', ' Interest expense excluding Financial Products'),
+                ('InterestExpenseNonoperating_EXFP', ' Interest expense excluding Financial Products'),
                 ('OtherNonoperatingIncomeExpense', ' Other income (expense)'),
                 ('IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments', 'Consolidated profit before taxes'),
                 ('IncomeTaxExpenseBenefit', ' Provision (benefit) for income taxes'),
                 ('ProfitOfConsolidatedCompanies', ' Profit of consolidated companies'),
                 ('IncomeLossFromEquityMethodInvestments', ' Equity in profit (loss) of unconsolidated affiliated companies'),
-                ('ProfitLoss', 'Profit of consolidated and affiliated companies'),
-                ('NetIncomeLossAttributableToNoncontrollingInterest', 'Less: Profit (loss) attributable to noncontrolling interests'),
-                ('NetIncomeLossAvailableToCommonStockholdersBasic', 'Profit (Attributable to Common Stockholders)'),
+                ('ProfitLoss', ' Profit of consolidated and affiliated companies'),
+                ('NetIncomeLossAttributableToNoncontrollingInterest', ' Less: Profit (loss) attributable to noncontrolling interests'),
+                ('NetIncomeLossAvailableToCommonStockholdersBasic', '           Profit (Attributable to Common Stockholders)'),
                 # EPS
                 ('EarningsPerShareBasic', 'Profit per common share'),
                 ('EarningsPerShareDiluted', 'Profit per common share - diluted'),
@@ -181,7 +181,7 @@ class ComprehensiveXBRLExtractor:
             logger.warning(f"Unknown statement type: {statement_type}")
             return OrderedDict()
 
-    # --- NEW: Candidate tags for income statement lines (robust matching) ---
+    # --- ENHANCED: More robust tag matching for income statement ---
     def _get_income_tag_candidates(self):
         """
         Return mapping from our income statement line keys to lists of acceptable XBRL tags.
@@ -196,11 +196,6 @@ class ComprehensiveXBRLExtractor:
                 'SalesRevenueGoodsNet',
                 'SalesRevenueServicesNet',
                 'RevenueFromContractWithCustomerExcludingAssessedTax'
-            ],
-            'CostOfRevenue': [
-                'CostOfRevenue',
-                'CostOfGoodsAndServicesSold',
-                'CostOfSales'
             ],
             'SellingGeneralAndAdministrativeExpense': [
                 'SellingGeneralAndAdministrativeExpense'
@@ -224,6 +219,7 @@ class ComprehensiveXBRLExtractor:
                 'InterestAndDebtExpense'
             ],
             'InterestExpenseNonoperating_EXFP': [
+                'InterestExpense_EXFP',
                 'InterestExpenseExcludingFinancialProducts'
             ],
             'OtherNonoperatingIncomeExpense': [
@@ -264,21 +260,21 @@ class ComprehensiveXBRLExtractor:
             'WeightedAverageNumberOfDilutedSharesOutstanding': [
                 'WeightedAverageNumberOfDilutedSharesOutstanding'
             ],
-            # NOTE: The following are label-like rows in your layout; we keep them if present
-            'ProfitOfConsolidatedCompanies': [
-                # Often approximated by Income from continuing operations after tax
-                'IncomeLossFromContinuingOperationsAfterIncomeTaxes'
-            ],
-            'FinancingInterestExpense_FinancialProducts': [
+            'FinancingInterestExpense_FP': [
                 'InterestExpense',
-                'InterestAndDebtExpense'
-            ],
+                'InterestAndDebtExpense',
+                'InterestExpenseOfFinancialProducts'
+            ]
         }
 
-    def get_all_filings(self, start_year=2020):
-        """Get all filings from start_year to present"""
+    def get_all_filings(self, start_date=None):
+        """
+        Get all filings from start_date to present
+        Args:
+            start_date: String in format 'YYYY-MM-DD' representing the earliest report date to include
+        """
         url = f"{self.base_url}/submissions/CIK{self.cik}.json"
-        logger.info(f"Fetching all filings since {start_year} for {self.company_name}")
+        logger.info(f"Fetching all filings since {start_date} for {self.company_name}")
         try:
             response = requests.get(url, headers=self.headers)
             response.raise_for_status()
@@ -288,20 +284,21 @@ class ComprehensiveXBRLExtractor:
 
             filings = []
             for i in range(len(recent['form'])):
-                filing_date = recent['filingDate'][i]
-                filing_year = int(filing_date.split('-')[0])
-                if filing_year >= start_year:
-                    form = recent['form'][i]
-                    if form in ['10-Q', '10-K']:
+                form = recent['form'][i]
+                if form in ['10-Q', '10-K']:
+                    report_date = recent['reportDate'][i]
+                    # Filter by report date, not filing date
+                    if start_date is None or report_date >= start_date:
                         filings.append({
                             'accession': recent['accessionNumber'][i],
-                            'filing_date': filing_date,
-                            'report_date': recent['reportDate'][i],
+                            'filing_date': recent['filingDate'][i],
+                            'report_date': report_date,
                             'form': form,
                             'primary_document': recent['primaryDocument'][i]
                         })
+            
             filings.sort(key=lambda x: x['report_date'])
-            logger.info(f"Found {len(filings)} filings since {start_year}")
+            logger.info(f"Found {len(filings)} filings since {start_date}")
             return filings
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching submissions: {e}")
@@ -312,7 +309,8 @@ class ComprehensiveXBRLExtractor:
         accession_no_dash = accession.replace('-', '')
         date_obj = datetime.strptime(report_date, '%Y-%m-%d')
         date_str = date_obj.strftime('%Y%m%d')
-        url = f"{self.sec_archives}/{self.cik_int}/{accession_no_dash}/{self.ticker}-{date_str}_htm.xml" or f"{self.sec_archives}/{self.cik_int}/{accession_no_dash}/{self.ticker}-{date_str}_htm.xml"
+        # FIXED: Removed redundant 'or' clause
+        url = f"{self.sec_archives}/{self.cik_int}/{accession_no_dash}/{self.ticker}-{date_str}_htm.xml"
         return url
 
     def download_instance_document(self, url):
@@ -424,9 +422,13 @@ class ComprehensiveXBRLExtractor:
             logger.error(f"Error processing filing: {e}")
             return []
 
-    def extract_all_data(self, start_year=2020):
-        """Extract all financial data"""
-        filings = self.get_all_filings(start_year=start_year)
+    def extract_all_data(self, start_date=None):
+        """
+        Extract all financial data
+        Args:
+            start_date: String in format 'YYYY-MM-DD' representing earliest report date to include
+        """
+        filings = self.get_all_filings(start_date=start_date)
         all_facts = []
         for i, filing in enumerate(filings, 1):
             logger.info(f"\n[{i}/{len(filings)}] " + "=" * 50)
@@ -612,7 +614,6 @@ class ComprehensiveXBRLExtractor:
 
         # Map segment suffix to expected member names
         segment_map = {
-            'FinancialProducts': 'FinancialProductsMember',
             'FP': 'FinancialProductsMember',
             'MET': 'MachineryEnergyTransportationMember',
             'EXFP': 'AllOtherExcludingFinancialProductsMember',
@@ -769,14 +770,19 @@ class ComprehensiveXBRLExtractor:
         # Freeze panes to keep quarter and date headers visible
         worksheet.freeze_panes = 'B3'
 
-    def export_to_excel(self, output_filename, start_year=2020):
-        """Extract and export all financial data"""
+    def export_to_excel(self, output_filename, start_date='2020-01-01'):
+        """
+        Extract and export all financial data
+        Args:
+            output_filename: Name of Excel file to create
+            start_date: String in format 'YYYY-MM-DD' for earliest report date to include
+        """
         logger.info("=" * 60)
         logger.info(f"Starting comprehensive extraction for {self.company_name}")
-        logger.info(f"Data range: {start_year} - Present")
+        logger.info(f"Data range: {start_date} - Present")
         logger.info("=" * 60)
 
-        df = self.extract_all_data(start_year)
+        df = self.extract_all_data(start_date)
         if df.empty:
             logger.warning("No data extracted!")
             return None
@@ -789,7 +795,7 @@ class ComprehensiveXBRLExtractor:
             self.format_excel_sheet(writer, 'All Data - Raw', df)
 
             # Income Statement
-            logger.info("\nCreating Income Statement")
+            logger.info("Creating Income Statement")
             income_pivot = self.create_statement_pivot(df, 'income')
             if not income_pivot.empty:
                 income_pivot.to_excel(writer, sheet_name='Income Statement - Quarterly', index=False)
@@ -809,8 +815,8 @@ class ComprehensiveXBRLExtractor:
                 cashflow_pivot.to_excel(writer, sheet_name='Cash Flow - Quarterly', index=False)
                 self.format_excel_sheet(writer, 'Cash Flow - Quarterly', cashflow_pivot)
 
-        logger.info("\n" + "=" * 60)
-        logger.info(f"✓ Export complete! File saved: {output_filename}")
+        logger.info("=" * 60)
+        logger.info(f"Export complete! File saved: {output_filename}")
         logger.info("=" * 60)
         return output_filename
 
@@ -821,7 +827,7 @@ def main():
     CIK = "0000018230"
     COMPANY_NAME = "Caterpillar Inc."
     TICKER = "cat"
-    START_YEAR = 2020
+    START_DATE = "2020-03-31"  # Q1 2020 report date
 
     extractor = ComprehensiveXBRLExtractor(
         email=YOUR_EMAIL,
@@ -831,13 +837,13 @@ def main():
     )
 
     output_file = extractor.export_to_excel(
-        output_filename='caterpillar_financials.xlsx',
-        start_year=START_YEAR
+        output_filename='caterpillar_financials_fixed.xlsx',
+        start_date=START_DATE
     )
 
     if output_file:
         print(f"\nSuccess! Complete financial data exported to: {output_file}")
-        print(f"\nData range: {START_YEAR} - Present")
+        print(f"\nData range: {START_DATE} - Present")
         print("\nThe Excel file contains:")
         print("  Income Statement - Quarterly")
         print("  Balance Sheet - Quarterly")
