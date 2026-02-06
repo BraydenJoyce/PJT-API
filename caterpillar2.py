@@ -750,6 +750,13 @@ def extract_all_data(self, start_year=2020):
         
         sort_col = 'end_date' if 'end_date' in df.columns else 'instant_date'
         df = df.sort_values([sort_col, 'tag', 'segment'], ascending=[True, True, True])
+        
+        # Drop exact duplicate facts (XBRL filings can report the same fact multiple times)
+        before = len(df)
+        df = df.drop_duplicates()
+        if len(df) < before:
+            logger.info(f"Removed {before - len(df)} exact duplicate facts")
+        
         logger.info(f"\nTotal facts extracted: {len(df)}")
     
     return df
@@ -1178,6 +1185,9 @@ def create_segment_pivot(self, df, segment_member):
     if seg_df.empty:
         logger.warning(f"No data found for segment: {segment_member}")
         return pd.DataFrame()
+    
+    # Drop exact duplicate rows (XBRL can report the same fact multiple times)
+    seg_df = seg_df.drop_duplicates()
     
     # Resolve candidate tags: for each segment item, find the best matching
     # XBRL tag and remap to the canonical key
